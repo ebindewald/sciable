@@ -8,7 +8,12 @@
       "Bash(python -m pytest -q)",
       "Bash(python -m pytest)",
       "Bash(uvicorn app.main:app *)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(gh auth *)",
+      "Bash(gh api *)",
+      "Bash(curl -s -o /dev/null -w \"repo API: HTTP %{http_code}\\\\n\" https://api.github.com/repos/ebindewald/sciable)",
+      "Bash(curl -s https://api.github.com/repos/ebindewald/sciable/contents/worker)",
+      "Bash(python -c 'import sys,json *)"
     ]
   }
 }

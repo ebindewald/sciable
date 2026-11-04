@@ -33,16 +33,22 @@ the weights, so it runs in your Runpod account, not locally.
 
 ## Step 1 — Get the worker image built
 
-The image recipe is `worker/Dockerfile.structrfm`. Two ways to build it.
+The structRFM image recipe is the **root `Dockerfile`** (named literally
+`Dockerfile`, at the repo root — Runpod's GitHub builder auto-detects it there;
+custom names/subpaths like `worker/Dockerfile.structrfm` triggered a
+"no Dockerfile found at that path" error). Two ways to build it.
 
 ### Option A (recommended, no local Docker) — Runpod builds from GitHub
 
 Runpod can pull your repo, build the Dockerfile on its own infrastructure
 (linux/amd64 — no Mac/Apple-Silicon arch issues), and deploy the endpoint for you.
+This is the **private** Serverless flow, NOT the public Runpod Hub — do not add a
+`.runpod/hub.json` (its absence keeps you off the Hub).
 
-1. Push this repo to GitHub (it must contain `worker/Dockerfile.structrfm`).
-2. Runpod console → **Serverless → New → deploy from GitHub** → connect your
-   GitHub account → pick the repo → set **Dockerfile path** = `worker/Dockerfile.structrfm`.
+1. Push this repo to GitHub (the root `Dockerfile` must be present).
+2. Runpod console → **Serverless → New Endpoint → Import Git Repository** →
+   connect GitHub → pick the repo → branch `main` → **leave Dockerfile Path EMPTY**
+   (root). Do not use the "publish to Hub" path.
 3. Runpod builds + stores the image and creates the endpoint (continue at step 2).
 
 Caveats: the build must finish in **30 minutes** (ours clones upstream, installs
@@ -50,7 +56,7 @@ torch 2.0.1 + transformers + structRFM + BPfold, and downloads the ~300 MB
 checkpoint — usually fine), one GitHub account per Runpod account, and the first
 build runs **unpinned** (the Dockerfile skips the checksum and prints the
 checkpoint's sha256 in the build log — grab it to pin later). Docs:
-<https://docs.runpod.io/serverless/github-integration>
+<https://docs.runpod.io/serverless/workers/github-integration>
 
 ### Option B — build locally with Docker Desktop and push
 
@@ -67,7 +73,7 @@ For a reproducible/pinned image, build it yourself. Replace the three pins first
    Also pin `STRUCTRFM_RELEASE` to a specific release tag instead of `latest`.
 3. **Build + push** for the GPU hosts' architecture:
    ```bash
-   docker build --platform linux/amd64 -f worker/Dockerfile.structrfm \
+   docker build --platform linux/amd64 -f Dockerfile \
      --build-arg STRUCTRFM_COMMIT=<full-sha> \
      --build-arg STRUCTRFM_RELEASE=<tag> \
      --build-arg STRUCTRFM_SSP_SHA256=<sha256> \

@@ -1,18 +1,20 @@
-# structRFM RNA secondary-structure Runpod Serverless worker.
+# Default Runpod Serverless worker image (structRFM).
 #
-# This image runs REAL structRFM inference: run_structrfm.py invokes upstream's
-# official SSP CLI (`scripts/structRFM_SSP.py --output_format dbn`) with a
-# fine-tuned checkpoint, both baked in here. Without them the runner falls back
-# to a clearly-marked stub (that path is for CPU/CI only).
+# Lives at the repo ROOT, named literally "Dockerfile", because Runpod's GitHub
+# integration auto-detects a root Dockerfile. In the Serverless "Import Git
+# Repository" flow leave the Dockerfile Path EMPTY (root) — do not point it at a
+# custom path/name; that is what triggered "no Dockerfile found at that path".
+#
+# This image runs REAL structRFM inference: worker/run_structrfm.py invokes
+# upstream's official SSP CLI (`scripts/structRFM_SSP.py --output_format dbn`)
+# with a fine-tuned checkpoint, both baked in here. Without them the runner falls
+# back to a clearly-marked stub (CPU/CI only).
 #
 # Upstream: https://github.com/heqin-zhu/structRFM  (MIT License)
 # Checkpoint: structRFM_SSP_bpRNA1m.pt  (GitHub release asset)
 #
-# Build for the Runpod GPU hosts (linux/amd64) and record the pushed digest in
-# methods/structrfm/manifest.json (worker_image_digest):
-#   docker build --platform linux/amd64 -f worker/Dockerfile.structrfm \
-#     -t <registry>/structrfm-worker:<tag> .
-#   docker push <registry>/structrfm-worker:<tag>
+# (gRNAde's separate stub worker image is worker/Dockerfile; per-method images
+# are a follow-up once real gRNAde lands.)
 
 # torch==2.0.1 per upstream; CUDA 11.7 runtime matches that build.
 FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
@@ -62,5 +64,6 @@ RUN useradd --create-home --uid 10001 worker \
     && chown -R worker:worker /var/lib/sciable /opt/structRFM
 USER worker
 
-# Runpod Serverless invokes the handler via this entrypoint.
+# Runpod Serverless invokes the handler via this entrypoint (calls
+# runpod.serverless.start() in worker/serverless_entry.py).
 CMD ["python", "-m", "worker.serverless_entry"]
