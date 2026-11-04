@@ -60,11 +60,26 @@ def _row_to_run(row) -> Run:
 
 
 class RunService:
-    def __init__(self, settings: Settings, manifest: Manifest, backend: Backend) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        manifests: dict[str, Manifest] | Manifest,
+        backend: Backend,
+    ) -> None:
         self.settings = settings
-        self.manifest = manifest
+        # Accept a single manifest (single-method callers/tests) or a registry.
+        if isinstance(manifests, Manifest):
+            manifests = {manifests.method_id: manifests}
+        self.manifests = manifests
         self.backend = backend
         self._outputs_dir = Path(settings.db_path).parent / "runs"
+
+    def _manifest_for_release(self, release_id: str) -> Manifest:
+        method_id = release_id.split("@", 1)[0]
+        manifest = self.manifests.get(method_id)
+        if manifest is None:
+            raise ValidationError("unknown_method", f"No manifest for method '{method_id}'.")
+        return manifest
 
     # -- queries ---------------------------------------------------------------
 
@@ -107,8 +122,9 @@ class RunService:
                 raise ValidationError("unknown_deployment", f"No deployment '{deployment_id}'.")
             release_id = dep["method_release_id"]
             exec_limits = json.loads(dep["exec_limits"])
+            manifest = self._manifest_for_release(release_id)
 
-            validated = validate_submission(self.manifest, raw=raw)
+            validated = validate_submission(manifest, raw=raw)
             fp = input_fingerprint(release_id, validated)
             idem = resolve_idempotency_key(fp, idempotency_key)
 
@@ -126,8 +142,8 @@ class RunService:
             job = JobSpec(
                 fingerprint=fp,
                 seed=validated.seed,
-                method_id=self.manifest.method_id,
-                output_kind=self.manifest.outputs.kind,
+                method_id=manifest.method_id,
+                output_kind=manifest.outputs.kind,
                 inputs=validated.values,
                 endpoint_ref=dep["endpoint_ref"],
             )

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Sciable — scientific methods{% endblock %}
+{% block body %}
+  <h1>Sciable</h1>
+  <p class="muted">Versioned scientific methods, each exposed through a web form and
+     an asynchronous API.</p>
+
+  <ul class="method-list">
+    {% for m in methods %}
+    <li class="method-card">
+      <a href="/methods/{{ m.method_id }}"><strong>{{ m.title }}</strong></a>
+      <div class="muted">{{ m.method_id }} · v{{ m.version }}
+        {% if m.provisional %}· <strong>provisional (pre-baseline)</strong>{% endif %}
+        · output: {{ m.outputs.kind }}</div>
+      {% if m.description %}<p>{{ m.description }}</p>{% endif %}
+      <a href="/methods/{{ m.method_id }}">Open &rarr;</a>
+    </li>
+    {% endfor %}
+  </ul>
+{% endblock %}

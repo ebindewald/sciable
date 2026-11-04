@@ -10,10 +10,10 @@ from fastapi import FastAPI
 from app import __version__, api, web
 from app.backends.base import Backend
 from app.backends.fake import FakeBackend
-from app.bootstrap import ensure_seeded
+from app.bootstrap import ensure_all_seeded
 from app.config import REPO_ROOT, Settings, get_settings
 from app.db import init_db
-from app.manifest import get_manifest
+from app.manifest import discover_manifests
 from app.runs import RunService
 
 # Load a local .env into the process environment (without overriding real env
@@ -34,21 +34,23 @@ def build_backend(settings: Settings) -> Backend:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    manifest = get_manifest(settings.method)
+    manifests = discover_manifests()
+    # The default method (used when a submission omits one) must exist.
+    default_method = settings.method if settings.method in manifests else next(iter(manifests))
     backend = build_backend(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         init_db(settings.db_path)
-        deployment_id = ensure_seeded(settings, manifest)
-        app.state.deployment_id = deployment_id
+        app.state.deployments = ensure_all_seeded(settings, manifests)
         yield
 
     app = FastAPI(title="Sciable", version=__version__, lifespan=lifespan)
     app.state.settings = settings
-    app.state.manifest = manifest
+    app.state.manifests = manifests
+    app.state.default_method = default_method
     app.state.backend = backend
-    app.state.run_service = RunService(settings, manifest, backend)
+    app.state.run_service = RunService(settings, manifests, backend)
     app.include_router(web.router)
     app.include_router(api.router)
     return app

@@ -5,22 +5,35 @@ from __future__ import annotations
 HTML = {"Accept": "text/html"}
 
 
+def test_landing_lists_both_methods(client):
+    text = client.get("/").text
+    assert "gRNAde" in text and "structRFM" in text
+    assert 'href="/methods/grnade"' in text
+    assert 'href="/methods/structrfm"' in text
+
+
 def test_method_page_renders(client):
-    resp = client.get("/")
+    resp = client.get("/methods/grnade")
     assert resp.status_code == 200
     assert "gRNAde" in resp.text
     assert "Submit run" in resp.text
+    assert 'name="method" value="grnade"' in resp.text  # hidden method field
+    assert "Mockup" in resp.text  # provisional methods are clearly flagged
+
+
+def test_unknown_method_page_404(client):
+    assert client.get("/methods/nope").status_code == 404
 
 
 def test_method_page_shows_example_choice(client):
-    text = client.get("/").text
+    text = client.get("/methods/grnade").text
     assert "Use the bundled example" in text
-    assert "chain A" in text          # example details are shown inline
-    assert 'href="/example"' in text  # link to view the input
+    assert "chain A" in text                           # example details inline
+    assert 'href="/methods/grnade/example"' in text    # link to view the input
 
 
 def test_method_page_shows_example_description_and_info(client):
-    text = client.get("/").text
+    text = client.get("/methods/grnade").text
     assert "synthetic 6-nucleotide" in text
     assert "More about this example" in text
     assert "inverse folding" in text
@@ -37,7 +50,7 @@ def test_run_page_shows_metrics_and_raw_output(client, example_pdb):
 
 
 def test_example_route_serves_pdb(client):
-    resp = client.get("/example")
+    resp = client.get("/methods/grnade/example")
     assert resp.status_code == 200
     assert "ATOM" in resp.text
 

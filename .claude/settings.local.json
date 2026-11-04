@@ -6,7 +6,9 @@
       "Bash(ruff check *)",
       "Bash(pytest)",
       "Bash(python -m pytest -q)",
-      "Bash(python -m pytest)"
+      "Bash(python -m pytest)",
+      "Bash(uvicorn app.main:app *)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

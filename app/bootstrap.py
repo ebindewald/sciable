@@ -1,9 +1,9 @@
-"""Seed the single method release and a deployment.
+"""Seed method releases and their deployments.
 
-v1 ships one method and one backend, so the control plane bootstraps one
-immutable MethodRelease (from the manifest) and one Deployment that points the
-release at an endpoint. For the fake backend the endpoint is a placeholder; the
-credential is stored only as a *reference* (an env-var name).
+For each method in the registry the control plane bootstraps one immutable
+MethodRelease (from the manifest) and one Deployment that points the release at
+an endpoint. For the fake backend the endpoint is a placeholder; the credential
+is stored only as a *reference* (an env-var name).
 """
 
 from __future__ import annotations
@@ -75,6 +75,11 @@ def ensure_seeded(settings: Settings, manifest: Manifest) -> str:
             ),
         )
     return deployment_id
+
+
+def ensure_all_seeded(settings: Settings, manifests: dict[str, Manifest]) -> dict[str, str]:
+    """Seed every method in the registry. Returns {method_id: deployment_id}."""
+    return {mid: ensure_seeded(settings, m) for mid, m in manifests.items()}
 
 
 def _endpoint_ref(settings: Settings) -> str:

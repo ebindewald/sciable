@@ -11,8 +11,11 @@ from app.db import init_db
 def test_index_responds(client):
     resp = client.get("/")
     assert resp.status_code == 200
+    # Landing page is the method catalog — both methods are listed and linked.
     assert "gRNAde" in resp.text
-    assert "Submit run" in resp.text
+    assert "structRFM" in resp.text
+    assert "/methods/grnade" in resp.text
+    assert "/methods/structrfm" in resp.text
 
 
 def test_health_ok(client):

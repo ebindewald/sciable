@@ -1,0 +1,9 @@
+# structRFM Runpod Serverless worker dependencies.
+#
+# Upstream (MIT): https://github.com/heqin-zhu/structRFM
+# Pin exact versions once confirmed by the M1 smoke run on a Runpod endpoint.
+runpod>=1.6
+torch==2.0.1
+transformers
+structRFM
+BPfold

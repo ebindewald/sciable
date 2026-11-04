@@ -27,12 +27,26 @@
   </table>
 
   {% if run.state == "succeeded" %}
+    {% if manifest.provisional %}
+    <p class="warn"><strong>⚠ Mockup output:</strong> a deterministic placeholder, not a
+       real {{ manifest.method_id }} prediction (pending M1). It depends only on input
+       size, not on the actual sequence/structure.</p>
+    {% endif %}
     {% if kind == "structure" %}
       <h2>Predicted secondary structure</h2>
       <p class="muted">A model estimate of base pairing — not an experimentally
          determined structure.</p>
-      <pre class="structure">{{ sequence }}
+      {% if structure_svg %}
+      <div class="rna-structure-wrap">{{ structure_svg | safe }}</div>
+      <p class="muted rna-legend">
+        <span class="swatch paired"></span> paired &nbsp;
+        <span class="swatch"></span> unpaired &nbsp; · arcs connect base pairs</p>
+      {% endif %}
+      <details>
+        <summary>Dot-bracket</summary>
+        <pre class="structure">{{ sequence }}
 {{ structure }}</pre>
+      </details>
       {% if struct_metrics %}
       <table>
         <tr><td>Length</td><td>{{ struct_metrics.length }} nt</td></tr>

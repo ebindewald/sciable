@@ -90,6 +90,67 @@ def structure_metrics(structure: str) -> dict:
     }
 
 
+def dot_bracket_pairs(structure: str) -> list[tuple[int, int]]:
+    """Resolve a dot-bracket string into 0-indexed base pairs (i, j), i < j.
+
+    Standard round brackets only; unbalanced brackets are ignored rather than
+    raising, so a malformed model output still renders what it can."""
+    stack: list[int] = []
+    pairs: list[tuple[int, int]] = []
+    for i, ch in enumerate(structure):
+        if ch == "(":
+            stack.append(i)
+        elif ch == ")" and stack:
+            pairs.append((stack.pop(), i))
+    return sorted(pairs)
+
+
+def render_structure_svg(sequence: str, structure: str) -> str:
+    """A server-rendered arc diagram: each base pair is an arc over the sequence.
+
+    One accent hue, theme-aware via CSS classes (see base.html); nested pairs rise
+    higher so hairpins and multiloops read at a glance. Returns an empty string if
+    there is nothing to draw."""
+    n = len(structure)
+    if n == 0:
+        return ""
+    cell, max_arc, pad = 22, 70, 10
+    baseline = max_arc + 6
+    letter_y = baseline + 16
+    tick_y = baseline + 30
+    width = n * cell + 2 * pad
+    height = tick_y + 6
+
+    def x(i: int) -> float:
+        return pad + i * cell + cell / 2
+
+    paired = {i for pair in dot_bracket_pairs(structure) for i in pair}
+
+    arcs: list[str] = []
+    for i, j in dot_bracket_pairs(structure):
+        h = min(max_arc, 10 + (j - i) * 3)
+        xm = (x(i) + x(j)) / 2
+        arcs.append(
+            f'<path class="rna-arc" d="M {x(i):.1f} {baseline} '
+            f'Q {xm:.1f} {baseline - 2 * h:.1f} {x(j):.1f} {baseline}"/>'
+        )
+
+    letters: list[str] = []
+    for i in range(n):
+        base = sequence[i] if i < len(sequence) else "·"
+        cls = "rna-base paired" if i in paired else "rna-base"
+        letters.append(f'<text class="{cls}" x="{x(i):.1f}" y="{letter_y}">{base}</text>')
+        if (i + 1) % 10 == 0:
+            letters.append(f'<text class="rna-tick" x="{x(i):.1f}" y="{tick_y}">{i + 1}</text>')
+
+    return (
+        f'<svg class="rna-structure" viewBox="0 0 {width} {height}" '
+        f'width="{width}" height="{height}" role="img" '
+        f'aria-label="Secondary-structure arc diagram, {len(paired) // 2} base pairs">'
+        f'{"".join(arcs)}{"".join(letters)}</svg>'
+    )
+
+
 def _public_inputs(run: Run, manifest: Manifest) -> dict:
     """Input values safe to echo back (large structure text replaced by size)."""
     pub: dict[str, Any] = {}
@@ -147,27 +208,46 @@ def _primary_input_field(manifest: Manifest) -> FieldSpec | None:
     )
 
 
-def _example_text(request: Request) -> str:
-    path = request.app.state.manifest.example_path()
+def _example_text(manifest: Manifest) -> str:
+    path = manifest.example_path()
     return path.read_text() if path else ""
 
 
-async def _parse_submission(request: Request) -> tuple[dict[str, Any], str | None]:
-    """Build a raw {field_name: value} dict from a JSON body or multipart form,
-    driven by the active manifest's declared fields."""
-    manifest: Manifest = request.app.state.manifest
+def resolve_method(request: Request, submitted: str | None) -> Manifest:
+    """Pick the manifest for a request — the submitted method, else the default."""
+    manifests: dict[str, Manifest] = request.app.state.manifests
+    method = submitted or request.app.state.default_method
+    manifest = manifests.get(method)
+    if manifest is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "unknown_method", "message": f"No method '{method}'."},
+        )
+    return manifest
+
+
+def manifest_for_run(request: Request, run: Run) -> Manifest:
+    method_id = run.resolved_release_id.split("@", 1)[0]
+    return resolve_method(request, method_id)
+
+
+async def _parse_submission(request: Request) -> tuple[Manifest, dict[str, Any], str | None]:
+    """Resolve the target method, then build a raw {field_name: value} dict from a
+    JSON body or multipart form, driven by that method's declared fields."""
     idempotency_key = request.headers.get("Idempotency-Key")
     ctype = request.headers.get("content-type", "")
     raw: dict[str, Any] = {}
 
     if ctype.startswith("application/json"):
         data = await request.json()
+        manifest = resolve_method(request, data.get("method"))
         for f in manifest.inputs.fields:
             raw[f.name] = data.get(f.name)
         use_example = bool(data.get("use_example"))
         idempotency_key = data.get("idempotency_key") or idempotency_key
     else:
         form = await request.form()
+        manifest = resolve_method(request, form.get("method"))
         for f in manifest.inputs.fields:
             if f.type == "pdb_structure":
                 value: Any = None
@@ -186,9 +266,9 @@ async def _parse_submission(request: Request) -> tuple[dict[str, Any], str | Non
     if use_example:
         primary = _primary_input_field(manifest)
         if primary is not None and not raw.get(primary.name):
-            raw[primary.name] = _example_text(request)
+            raw[primary.name] = _example_text(manifest)
 
-    return raw, idempotency_key
+    return manifest, raw, idempotency_key
 
 
 def _wants_html(request: Request) -> bool:
@@ -198,9 +278,8 @@ def _wants_html(request: Request) -> bool:
 @router.post("/runs", dependencies=[Depends(require_operator)])
 async def create_run(request: Request):
     service: RunService = request.app.state.run_service
-    manifest: Manifest = request.app.state.manifest
-    deployment_id: str = request.app.state.deployment_id
-    raw, idempotency_key = await _parse_submission(request)
+    manifest, raw, idempotency_key = await _parse_submission(request)
+    deployment_id: str = request.app.state.deployments[manifest.method_id]
 
     try:
         run = service.create_run(
@@ -231,11 +310,10 @@ async def create_run(request: Request):
 @router.get("/runs/{run_id}", dependencies=[Depends(require_operator)])
 def get_run(run_id: str, request: Request):
     service: RunService = request.app.state.run_service
-    manifest: Manifest = request.app.state.manifest
     run = service.poll_run(run_id)  # reconcile with backend on read
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found.")
-    return serialize_run(run, manifest)
+    return serialize_run(run, manifest_for_run(request, run))
 
 
 @router.get("/runs/{run_id}/raw", dependencies=[Depends(require_operator)])

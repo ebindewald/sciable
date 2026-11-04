@@ -1,9 +1,10 @@
 """Server-rendered web routes.
 
-The method page submits to ``POST /api/runs`` (the same endpoint API clients use);
-content negotiation there redirects the browser to the results page below. This
-module only renders — all submission logic lives in the run service. The form and
-the results view are driven by the active manifest's fields and output kind.
+``/`` is a landing page listing every method in the registry; ``/methods/{id}``
+renders one method's form. Both the form and the results view are driven by the
+method's manifest (declared fields + output kind). Submissions post to
+``POST /api/runs`` (the same endpoint API clients use) carrying a ``method`` field;
+content negotiation there redirects the browser to the results page below.
 """
 
 from __future__ import annotations
@@ -16,8 +17,11 @@ from fastapi.templating import Jinja2Templates
 
 from app.api import (
     _primary_input_field,
+    manifest_for_run,
     read_outputs,
     read_raw_output,
+    render_structure_svg,
+    resolve_method,
     sequence_metrics,
     structure_metrics,
 )
@@ -52,7 +56,18 @@ def _example_info(manifest) -> dict | None:
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    manifest = request.app.state.manifest
+    """Landing page: the catalog of available methods."""
+    manifests = request.app.state.manifests
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {"methods": list(manifests.values())},
+    )
+
+
+@router.get("/methods/{method_id}", response_class=HTMLResponse)
+def method_page(method_id: str, request: Request):
+    manifest = resolve_method(request, method_id)
     primary = _primary_input_field(manifest)
     secondary = [f for f in manifest.inputs.fields if primary is None or f.name != primary.name]
     return templates.TemplateResponse(
@@ -67,10 +82,10 @@ def index(request: Request):
     )
 
 
-@router.get("/example", response_class=PlainTextResponse)
-def example_structure(request: Request):
-    """Serve the bundled example input so users can inspect what they'll submit."""
-    manifest = request.app.state.manifest
+@router.get("/methods/{method_id}/example", response_class=PlainTextResponse)
+def method_example(method_id: str, request: Request):
+    """Serve a method's bundled example input so users can inspect what they'll submit."""
+    manifest = resolve_method(request, method_id)
     path = manifest.example_path()
     if path is None or not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No bundled example.")
@@ -82,10 +97,10 @@ def example_structure(request: Request):
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 def run_page(run_id: str, request: Request):
     service: RunService = request.app.state.run_service
-    manifest = request.app.state.manifest
     run = service.poll_run(run_id)  # reconcile on read
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found.")
+    manifest = manifest_for_run(request, run)
 
     uncertain = run.state == RunState.QUEUED and run.error_category == UNCERTAIN_SUBMISSION
     succeeded = run.state == RunState.SUCCEEDED
@@ -104,9 +119,11 @@ def run_page(run_id: str, request: Request):
     }
     if succeeded and kind == "structure":
         structure = outputs.get("structure") or ""
+        sequence = outputs.get("sequence") or ""
         ctx["structure"] = structure
-        ctx["sequence"] = outputs.get("sequence") or ""
+        ctx["sequence"] = sequence
         ctx["struct_metrics"] = structure_metrics(structure) if structure else None
+        ctx["structure_svg"] = render_structure_svg(sequence, structure) if structure else ""
     elif succeeded:
         sequences = outputs.get("sequences", [])
         ctx["sequences"] = sequences

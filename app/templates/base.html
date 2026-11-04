@@ -37,6 +37,30 @@
     table.designs th, table.designs td { border: 1px solid #8884; padding: 0.3rem 0.6rem;
                                          text-align: left; }
     table.designs code { word-break: break-all; }
+
+    /* RNA secondary-structure arc diagram (one accent hue, theme-aware) */
+    :root { --rna-accent: #0f766e; --rna-ink: #1a1a1a; --rna-muted: #888; }
+    @media (prefers-color-scheme: dark) {
+      :root { --rna-accent: #5eead4; --rna-ink: #e6e6e6; }
+    }
+    .rna-structure-wrap { overflow-x: auto; margin: 0.6rem 0; padding: 0.4rem 0; }
+    svg.rna-structure .rna-arc { fill: none; stroke: var(--rna-accent);
+                                 stroke-width: 2; stroke-linecap: round; opacity: 0.85; }
+    svg.rna-structure .rna-base { font-family: ui-monospace, monospace; font-size: 13px;
+                                  text-anchor: middle; fill: var(--rna-ink); }
+    svg.rna-structure .rna-base.paired { fill: var(--rna-accent); font-weight: 700; }
+    svg.rna-structure .rna-tick { font-family: ui-monospace, monospace; font-size: 9px;
+                                  text-anchor: middle; fill: var(--rna-muted); }
+    .rna-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                          background: var(--rna-muted); vertical-align: baseline; }
+    .rna-legend .swatch.paired { background: var(--rna-accent); }
+
+    /* Method catalog (landing page) */
+    ul.method-list { list-style: none; padding: 0; }
+    li.method-card { border: 1px solid #8884; border-radius: 8px; padding: 0.9rem 1.1rem;
+                     margin: 0.8rem 0; }
+    li.method-card > a:first-child { font-size: 1.1rem; text-decoration: none; }
+    li.method-card p { margin: 0.5rem 0; }
   </style>
 </head>
 <body>
