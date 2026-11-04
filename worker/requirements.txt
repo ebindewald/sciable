@@ -1,0 +1,7 @@
+# Worker image dependencies.
+#
+# For the current (stub) worker, only the Runpod SDK is needed — run_grnade.py
+# uses the standard library. When the M1 baseline pins real gRNAde, add its
+# pinned requirements here (torch, torch-geometric, etc.) and switch the
+# Dockerfile base to a matching CUDA image.
+runpod>=1.6

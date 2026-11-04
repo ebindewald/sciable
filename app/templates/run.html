@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.id[:8] }}{% endblock %}
+{% block head %}
+  {% if not terminal %}<meta http-equiv="refresh" content="2">{% endif %}
+{% endblock %}
+{% block body %}
+  <p><a href="/">&larr; New run</a></p>
+  <h1>Run <code>{{ run.id[:8] }}</code></h1>
+  <p class="muted">{{ manifest.title }}</p>
+  <p class="state state-{{ run.state }}">{{ run.state | upper }}</p>
+
+  {% if uncertain %}
+    <p class="warn">Submission outcome is uncertain — the provider may or may not have
+       accepted this job. It will not be resubmitted automatically to avoid a second
+       GPU charge. Check your Runpod account before retrying.</p>
+  {% endif %}
+
+  <table>
+    <tr><td>Method</td><td>{{ manifest.method_id }} · v{{ manifest.version }}</td></tr>
+    <tr><td>Seed</td><td>{{ run.seed if run.seed is not none else "—" }}</td></tr>
+    <tr><td>Submitted</td><td>{{ run.submitted_at or "—" }}</td></tr>
+    <tr><td>Finished</td><td>{{ run.finished_at or "—" }}</td></tr>
+    <tr><td>Fingerprint</td><td><code>{{ run.input_fingerprint[:16] }}…</code></td></tr>
+    {% if run.error_category and not uncertain %}
+    <tr><td>Error</td><td>{{ run.error_category }}</td></tr>
+    {% endif %}
+  </table>
+
+  {% if run.state == "succeeded" %}
+    {% if kind == "structure" %}
+      <h2>Predicted secondary structure</h2>
+      <p class="muted">A model estimate of base pairing — not an experimentally
+         determined structure.</p>
+      <pre class="structure">{{ sequence }}
+{{ structure }}</pre>
+      {% if struct_metrics %}
+      <table>
+        <tr><td>Length</td><td>{{ struct_metrics.length }} nt</td></tr>
+        <tr><td>Base pairs</td><td>{{ struct_metrics.base_pairs }}</td></tr>
+        <tr><td>Unpaired</td><td>{{ struct_metrics.unpaired }}</td></tr>
+        <tr><td>Paired</td><td>{{ struct_metrics.paired_percent }}%</td></tr>
+      </table>
+      {% endif %}
+      <details>
+        <summary>Copy dot-bracket</summary>
+        <pre>&gt;{{ run.id[:8] }}
+{{ sequence }}
+{{ structure }}</pre>
+      </details>
+    {% else %}
+      <h2>Candidate designs</h2>
+      <p class="muted">Candidates for the supplied backbone; not validated for function.</p>
+      <table class="designs">
+        <tr><th>#</th><th>Sequence (5′→3′)</th><th>Length</th><th>GC%</th></tr>
+        {% for m in metrics %}
+        <tr>
+          <td>{{ m.id }}</td>
+          <td><code>{{ sequences[loop.index0] }}</code></td>
+          <td>{{ m.length }}</td>
+          <td>{{ m.gc_percent }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      <details>
+        <summary>Download / copy FASTA</summary>
+        <pre>{% for seq in sequences %}&gt;design_{{ loop.index }}
+{{ seq }}
+{% endfor %}</pre>
+      </details>
+    {% endif %}
+
+    {% if raw_stdout %}
+    <details>
+      <summary>Program log</summary>
+      <pre>{{ raw_stdout }}</pre>
+    </details>
+    {% endif %}
+
+    {% if raw_json %}
+    <details>
+      <summary>Raw program output (JSON)</summary>
+      <p class="muted">Exact worker output. Also at
+         <a href="/api/runs/{{ run.id }}/raw" target="_blank">/api/runs/{{ run.id }}/raw</a>.</p>
+      <pre>{{ raw_json }}</pre>
+    </details>
+    {% endif %}
+  {% elif not terminal %}
+    <p class="muted">This page refreshes automatically…</p>
+  {% endif %}
+{% endblock %}

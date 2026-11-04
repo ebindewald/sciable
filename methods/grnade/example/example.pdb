@@ -1,0 +1,16 @@
+HEADER    RNA EXAMPLE (SYNTHETIC, NON-BIOLOGICAL)
+REMARK    Bundled smoke-test fixture; not a real structure.
+ATOM      1  P     A A   1       1.000   0.000   0.000  1.00  0.00           P
+ATOM      2  C1'   A A   1       1.000   0.000   1.500  1.00  0.00           C
+ATOM      3  P     U A   2       2.000   0.000   0.000  1.00  0.00           P
+ATOM      4  C1'   U A   2       2.000   0.000   1.500  1.00  0.00           C
+ATOM      5  P     G A   3       3.000   0.000   0.000  1.00  0.00           P
+ATOM      6  C1'   G A   3       3.000   0.000   1.500  1.00  0.00           C
+ATOM      7  P     C A   4       4.000   0.000   0.000  1.00  0.00           P
+ATOM      8  C1'   C A   4       4.000   0.000   1.500  1.00  0.00           C
+ATOM      9  P     A A   5       5.000   0.000   0.000  1.00  0.00           P
+ATOM     10  C1'   A A   5       5.000   0.000   1.500  1.00  0.00           C
+ATOM     11  P     U A   6       6.000   0.000   0.000  1.00  0.00           P
+ATOM     12  C1'   U A   6       6.000   0.000   1.500  1.00  0.00           C
+TER
+END

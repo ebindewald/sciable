@@ -1,0 +1,61 @@
+{
+  "method_id": "grnade",
+  "version": "0.1.0-dev",
+  "title": "gRNAde — RNA sequence design for a target structure",
+  "description": "Design candidate RNA sequences for a target 3D structure (inverse folding). Outputs are candidates for the supplied backbone — a successful run does not validate folding or biological function.",
+  "citation": "Joshi et al., gRNAde: Geometric Deep Learning for 3D RNA inverse design. https://github.com/chaitjo/geometric-rna-design",
+  "source_commit": "PENDING-M1-PIN",
+  "checkpoint_digest": "PENDING-M1-PIN",
+  "worker_image_digest": "PENDING-M4-BUILD",
+  "provisional": true,
+  "runner": "run_grnade.py",
+  "inputs": {
+    "fields": [
+      {
+        "name": "structure",
+        "type": "pdb_structure",
+        "required": true,
+        "label": "Input structure",
+        "help": "One PDB file with a single RNA chain.",
+        "max_bytes": 2097152
+      },
+      {
+        "name": "chain",
+        "type": "text",
+        "required": false,
+        "label": "RNA chain",
+        "help": "Auto-detected if the structure has a single RNA chain.",
+        "max_length": 4
+      },
+      {
+        "name": "design_count",
+        "type": "int",
+        "required": false,
+        "label": "Number of designs",
+        "default": 5,
+        "min": 1,
+        "max": 10
+      },
+      {
+        "name": "seed",
+        "type": "int",
+        "required": false,
+        "label": "Seed",
+        "help": "Deterministic if set."
+      }
+    ]
+  },
+  "outputs": {
+    "kind": "sequences",
+    "format": "fasta"
+  },
+  "limits": {
+    "job_timeout_s": 900,
+    "max_in_flight": 1,
+    "max_sequence_length": 400
+  },
+  "example_ref": "methods/grnade/example/example.pdb",
+  "example_summary": "A tiny synthetic 6-nucleotide RNA backbone (chain A), bundled so you can try the pipeline without hunting for a structure.",
+  "example_details": "This is a hand-made placeholder fixture, not a real biological molecule: six residues (A-U-G-C-A-U) on a single RNA chain with just enough atoms to exercise parsing, chain detection, and the end-to-end run. gRNAde's job is 'inverse folding' — given a 3D backbone shape, propose RNA sequences predicted to fold into it. For this example the backbone is synthetic, so the returned sequences are only meaningful as a demonstration of the workflow. Swap in a real PDB (one RNA chain) to design for an actual target, and note that until the real model is wired in, all sequences are deterministic placeholders rather than gRNAde predictions.",
+  "notes": "source_commit, checkpoint_digest, worker_image_digest, max_sequence_length and the structure max_bytes are provisional until confirmed by the M1 baseline and M4 smoke runs (see IMPLEMENTATION_PLAN.md)."
+}

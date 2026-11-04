@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Sciable{% endblock %}</title>
+  {% block head %}{% endblock %}
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto;
+           padding: 0 1rem; line-height: 1.5; }
+    h1 { margin-bottom: 0.2rem; }
+    .muted { color: #777; font-size: 0.9rem; }
+    label { display: block; margin: 0.8rem 0 0.2rem; font-weight: 600; }
+    input, textarea, button { font: inherit; }
+    textarea { width: 100%; }
+    button { margin-top: 1rem; padding: 0.5rem 1rem; cursor: pointer; }
+    .state { font-weight: 700; }
+    .state-succeeded { color: #2e7d32; }
+    .state-failed { color: #c62828; }
+    .state-running, .state-queued { color: #ef6c00; }
+    pre { background: #8881; padding: 0.8rem; overflow-x: auto; border-radius: 6px; }
+    .warn { background: #ffb30022; border-left: 4px solid #ffb300; padding: 0.6rem 0.8rem; }
+    table td { padding: 0.15rem 0.6rem 0.15rem 0; vertical-align: top; }
+    fieldset { border: 1px solid #8884; border-radius: 6px; margin: 1rem 0; }
+    legend { padding: 0 0.4rem; }
+    label.choice { display: flex; gap: 0.5rem; align-items: flex-start; font-weight: 400;
+                   margin: 0.6rem 0; padding: 0.6rem; border-radius: 6px; background: #8881; }
+    label.choice input[type=radio] { margin-top: 0.3rem; }
+    details { margin: 0.6rem 0; }
+    summary { cursor: pointer; }
+    details.info { display: inline-block; margin: 0.2rem 0; }
+    details.info > summary { display: inline; color: #1565c0; font-weight: 700;
+                             list-style: none; padding: 0 0.3rem; }
+    details.info > summary::-webkit-details-marker { display: none; }
+    table.designs { border-collapse: collapse; margin: 0.6rem 0; width: 100%; }
+    table.designs th, table.designs td { border: 1px solid #8884; padding: 0.3rem 0.6rem;
+                                         text-align: left; }
+    table.designs code { word-break: break-all; }
+  </style>
+</head>
+<body>
+  {% block body %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,164 @@
+"""Worker request handler — one isolated subprocess per job.
+
+Isolation model (per AGENTS.md): each job runs in a fresh subprocess with its
+own writable workspace, HOME, and TMPDIR. Inputs are treated as data (written to
+``input.json`` in the job dir; never interpolated into a shell), arguments are
+passed as an array, and the job directory is removed on success and on failure.
+This separates *accidental* state for a trusted adapter; sandboxing arbitrary
+submitted code would need a separate isolation design.
+
+The handler is method-agnostic: it dispatches on ``method`` to the matching
+runner script, hands it ``input.json`` (the validated input values) and an
+``--out`` path, and reads back ``out.json`` (the method's output values). Adding
+a method is a manifest + a runner here — no handler change beyond the registry.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import uuid
+from dataclasses import dataclass, field
+from pathlib import Path
+
+RUNNERS_DIR = Path(__file__).resolve().parent
+#: method_id -> runner script baked into the worker image.
+RUNNERS = {
+    "grnade": "run_grnade.py",
+    "structrfm": "run_structrfm.py",
+}
+DEFAULT_TIMEOUT_S = int(os.environ.get("WORKER_JOB_TIMEOUT_S", "900"))
+
+
+class WorkerError(Exception):
+    """Job failed. ``category`` is a stable, content-free label."""
+
+    def __init__(self, category: str, message: str = "") -> None:
+        super().__init__(message or category)
+        self.category = category
+
+
+@dataclass
+class JobResult:
+    outputs: dict = field(default_factory=dict)
+    runner_report: dict = field(default_factory=dict)
+    stdout: str = ""
+
+
+def _isolated_dirs(base: Path, job_id: str) -> tuple[Path, Path, Path, Path]:
+    job_dir = base / job_id
+    work, home, tmp = job_dir / "work", job_dir / "home", job_dir / "tmp"
+    for d in (work, home, tmp):
+        d.mkdir(parents=True, exist_ok=True)
+    return job_dir, work, home, tmp
+
+
+def run_job(
+    job_input: dict,
+    *,
+    base_dir: Path | None = None,
+    runners_dir: Path = RUNNERS_DIR,
+    runner: Path | None = None,
+    python_executable: str | None = None,
+    timeout_s: int = DEFAULT_TIMEOUT_S,
+    cleanup: bool = True,
+) -> JobResult:
+    """Run one job in an isolated subprocess.
+
+    ``job_input`` keys: ``method`` (defaults to ``grnade``) and ``inputs`` (the
+    validated input values dict). ``runner`` overrides the method->script lookup
+    (used in tests). Raises :class:`WorkerError` on any failure; the job directory
+    is always removed afterwards (unless ``cleanup=False``).
+    """
+    method = job_input.get("method") or "grnade"
+    inputs = job_input.get("inputs") or {}
+    if runner is None:
+        runner_name = RUNNERS.get(method)
+        if runner_name is None:
+            raise WorkerError("unknown_method", f"No runner for method '{method}'.")
+        runner = runners_dir / runner_name
+
+    base = base_dir or Path(os.environ.get("WORKER_WORK_ROOT", "/tmp/sciable-jobs"))
+    base.mkdir(parents=True, exist_ok=True)
+    job_id = uuid.uuid4().hex
+    job_dir, work, home, tmp = _isolated_dirs(base, job_id)
+
+    try:
+        input_path = work / "input.json"
+        input_path.write_text(json.dumps(inputs))  # inputs are data, written to a file
+        out_path = work / "out.json"
+
+        argv = [
+            python_executable or sys.executable,
+            str(runner),
+            "--input", str(input_path),
+            "--out", str(out_path),
+        ]
+
+        # Minimal, isolated environment: private HOME/TMPDIR so a model that
+        # caches to ~/ cannot share state across jobs.
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": str(home),
+            "TMPDIR": str(tmp),
+            "PYTHONHASHSEED": "0",
+        }
+
+        try:
+            proc = subprocess.run(  # noqa: S603 - argv is a fixed array, shell=False
+                argv,
+                env=env,
+                cwd=str(work),
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise WorkerError("timeout", f"Job exceeded {timeout_s}s.") from exc
+
+        if proc.returncode != 0:
+            raise WorkerError("worker_error", "Runner exited non-zero.")
+        if not out_path.exists():
+            raise WorkerError("no_output", "Runner produced no output file.")
+
+        try:
+            outputs = json.loads(out_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise WorkerError("bad_output", "Runner output was not valid JSON.") from exc
+
+        report = _parse_report(proc.stdout)
+        return JobResult(outputs=outputs, runner_report=report, stdout=proc.stdout)
+    finally:
+        if cleanup:
+            shutil.rmtree(job_dir, ignore_errors=True)
+
+
+def _parse_report(stdout: str) -> dict:
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if line.startswith("{") and line.endswith("}"):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+    return {}
+
+
+def handler(event: dict) -> dict:
+    """Runpod Serverless entrypoint.
+
+    Returns timing/outputs only; never echoes raw input content back to shared logs.
+    """
+    try:
+        result = run_job(event.get("input", {}))
+    except WorkerError as exc:
+        return {"error": exc.category}
+    return {
+        "outputs": result.outputs,
+        "report": result.runner_report,
+        "stdout": result.stdout,
+    }

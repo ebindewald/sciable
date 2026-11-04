@@ -1,0 +1,43 @@
+{
+  "method_id": "structrfm",
+  "version": "0.1.0-dev",
+  "title": "structRFM — RNA secondary-structure prediction",
+  "description": "Predict the secondary structure (base pairing) of an RNA sequence with the structure-guided RNA foundation model structRFM. Output is a dot-bracket string over the input sequence; predicted pairs are a model estimate, not an experimentally determined structure.",
+  "citation": "Zhu et al., An open structure-guided RNA foundation model for generalizable prediction. Nature (2026). https://github.com/heqin-zhu/structRFM",
+  "source_commit": "PENDING-M1-PIN",
+  "checkpoint_digest": "PENDING-M1-PIN",
+  "worker_image_digest": "PENDING-M4-BUILD",
+  "provisional": true,
+  "runner": "run_structrfm.py",
+  "inputs": {
+    "fields": [
+      {
+        "name": "sequence",
+        "type": "rna_sequence",
+        "required": true,
+        "label": "RNA sequence",
+        "help": "A single RNA sequence over A/C/G/U (N allowed for unknown positions).",
+        "max_length": 500
+      },
+      {
+        "name": "seed",
+        "type": "int",
+        "required": false,
+        "label": "Seed",
+        "help": "Prediction is deterministic; seed is accepted for reproducibility bookkeeping."
+      }
+    ]
+  },
+  "outputs": {
+    "kind": "structure",
+    "format": "dot_bracket"
+  },
+  "limits": {
+    "job_timeout_s": 900,
+    "max_in_flight": 1
+  },
+  "example_ref": "methods/structrfm/example/example.fasta",
+  "example_summary": "A tiny 12-nucleotide RNA hairpin (GGGGAAAACCCC), bundled so you can try the pipeline without supplying a sequence.",
+  "example_details": "A hand-picked minimal hairpin: four G-C pairs closing a four-base loop, whose textbook fold is ((((....)))). It exercises the sequence -> dot-bracket path end to end. Swap in any single RNA sequence over A/C/G/U to predict its structure. Until the real structRFM checkpoint is wired in (M1), the returned structure is a deterministic placeholder, not a structRFM prediction.",
+  "notes": "source_commit, checkpoint_digest, worker_image_digest and the sequence max_length are provisional until confirmed by the M1 baseline and M4 smoke runs (see IMPLEMENTATION_PLAN.md)."
+}

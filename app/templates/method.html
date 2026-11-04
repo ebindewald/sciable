@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ manifest.title }}{% endblock %}
+{% block body %}
+  <h1>{{ manifest.title }}</h1>
+  <p class="muted">{{ manifest.method_id }} · v{{ manifest.version }}
+     {% if manifest.provisional %}· <strong>provisional (pre-baseline)</strong>{% endif %}</p>
+  {% if manifest.description %}<p>{{ manifest.description }}</p>{% endif %}
+
+  <form action="/api/runs" method="post" enctype="multipart/form-data">
+    {% if primary %}
+    <fieldset>
+      <legend><strong>{{ primary.label or primary.name }}</strong></legend>
+
+      <label class="choice">
+        <input type="radio" name="use_example" value="1" checked
+               onchange="document.getElementById('primary_entry').disabled = true">
+        <span>
+          <strong>Use the bundled example</strong> — nothing to enter, just submit.
+          {% if manifest.example_summary %}
+            <br>{{ manifest.example_summary }}
+            {% if manifest.example_details %}
+              <details class="info">
+                <summary title="More about this example">&#9432;</summary>
+                <span class="muted">{{ manifest.example_details }}</span>
+              </details>
+            {% endif %}
+          {% endif %}
+          {% if example %}
+            <br><span class="muted">
+              {{ example.filename }}
+              {% if example.chain %}· chain {{ example.chain }} {% endif %}
+              {% if example.length %}· {{ example.length }} nt {% endif %}
+              · <a href="/example" target="_blank">view input</a></span>
+          {% endif %}
+        </span>
+      </label>
+
+      <label class="choice">
+        <input type="radio" name="use_example" value=""
+               onchange="document.getElementById('primary_entry').disabled = false">
+        <span>
+          {% if primary.type == "pdb_structure" %}
+            <strong>Upload my own PDB</strong> — one RNA chain.
+            <br><input type="file" id="primary_entry" name="{{ primary.name }}_file"
+                       accept=".pdb,.cif,text/plain" disabled>
+            {% if primary.max_bytes %}
+            <br><span class="muted">Max {{ primary.max_bytes }} bytes.</span>{% endif %}
+          {% else %}
+            <strong>Enter my own sequence</strong> — single RNA, A/C/G/U.
+            <br><textarea id="primary_entry" name="{{ primary.name }}" rows="3"
+                          placeholder="e.g. GGGGAAAACCCC" disabled></textarea>
+            {% if primary.max_length %}
+            <br><span class="muted">Max {{ primary.max_length }} nucleotides.</span>{% endif %}
+          {% endif %}
+        </span>
+      </label>
+    </fieldset>
+    {% endif %}
+
+    {% for f in secondary_fields %}
+      <label for="f_{{ f.name }}">{{ f.label or f.name }}{% if f.type == "int" and (f.min is not none or f.max is not none) %}
+        ({{ f.min if f.min is not none else "" }}{% if f.min is not none and f.max is not none %}–{% endif %}{{ f.max if f.max is not none else "" }}){% endif %}</label>
+      {% if f.type == "int" %}
+        <input type="number" id="f_{{ f.name }}" name="{{ f.name }}"
+               {% if f.min is not none %}min="{{ f.min }}"{% endif %}
+               {% if f.max is not none %}max="{{ f.max }}"{% endif %}
+               {% if f.default is not none %}value="{{ f.default }}"{% endif %}
+               {% if f.help %}placeholder="{{ f.help }}"{% endif %}>
+      {% else %}
+        <input type="text" id="f_{{ f.name }}" name="{{ f.name }}"
+               {% if f.max_length %}maxlength="{{ f.max_length }}"{% endif %}
+               placeholder="{{ f.help or '' }}">
+      {% endif %}
+    {% endfor %}
+
+    <button type="submit">Submit run</button>
+  </form>
+{% endblock %}

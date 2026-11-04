@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local control-plane state and run outputs
+sciable.db
+sciable.db-*
+*.db
+*.db-wal
+*.db-shm
+runs/
+
+# Env
+.env
+.venv/
+venv/
+
+# Local Claude Code settings (personal, not shared)
+.claude/settings.local.json
+
+# Build
+*.egg-info/
+build/
+dist/
