@@ -107,6 +107,17 @@ def main(argv: list[str] | None = None) -> int:
     home = Path(os.path.expanduser("~"))
     seen_at_start = sorted(p.name for p in home.iterdir()) if home.exists() else []
 
+    # Diagnostics: why did we (not) take the real path? Surfaced in the report so
+    # a stub fallback on a GPU worker is explainable at a glance.
+    _script = os.environ.get("STRUCTRFM_SSP_SCRIPT")
+    _ckpt = os.environ.get("STRUCTRFM_SSP_CHECKPOINT")
+    diag = {
+        "ssp_script_env": _script,
+        "ssp_ckpt_env": _ckpt,
+        "script_exists": bool(_script and Path(_script).exists()),
+        "ckpt_exists": bool(_ckpt and Path(_ckpt).exists()),
+    }
+
     real = _real_paths()
     if real is not None:
         # A configured real path that fails must error (not silently fall to stub),
@@ -130,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
         "seen_at_start": seen_at_start,
         "length": len(sequence),
         "format": "dot_bracket",
+        "diag": diag,
     }))
     return 0
 

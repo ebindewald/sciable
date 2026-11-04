@@ -98,14 +98,15 @@ def run_job(
             "--out", str(out_path),
         ]
 
-        # Minimal, isolated environment: private HOME/TMPDIR so a model that
-        # caches to ~/ cannot share state across jobs.
-        env = {
-            "PATH": os.environ.get("PATH", ""),
-            "HOME": str(home),
-            "TMPDIR": str(tmp),
-            "PYTHONHASHSEED": "0",
-        }
+        # Inherit the container environment — real runners need PATH, the CUDA /
+        # LD_LIBRARY_PATH entries, and the model-config vars baked into the image
+        # (e.g. STRUCTRFM_SSP_SCRIPT / STRUCTRFM_SSP_CHECKPOINT) — but give each
+        # job a PRIVATE HOME and TMPDIR so a model that caches to ~/ or writes
+        # temp files cannot share state across jobs.
+        env = dict(os.environ)
+        env["HOME"] = str(home)
+        env["TMPDIR"] = str(tmp)
+        env["PYTHONHASHSEED"] = "0"
 
         try:
             proc = subprocess.run(  # noqa: S603 - argv is a fixed array, shell=False
