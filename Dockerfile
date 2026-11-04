@@ -57,6 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git wget ca-cer
        fi
 
 COPY worker/ /opt/worker/worker/
+COPY rp_handler.py /opt/worker/rp_handler.py
 
 # Non-root; writable per-job root owned by the run user.
 RUN useradd --create-home --uid 10001 worker \
@@ -64,6 +65,6 @@ RUN useradd --create-home --uid 10001 worker \
     && chown -R worker:worker /var/lib/sciable /opt/structRFM
 USER worker
 
-# Runpod Serverless invokes the handler via this entrypoint (calls
-# runpod.serverless.start() in worker/serverless_entry.py).
-CMD ["python", "-m", "worker.serverless_entry"]
+# Runpod Serverless entrypoint: a concrete root file whose module-level
+# runpod.serverless.start() is what Runpod's handler detection looks for.
+CMD ["python", "-u", "rp_handler.py"]
