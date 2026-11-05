@@ -30,7 +30,15 @@ import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
+
+_T0 = time.monotonic()
+
+
+def _log(msg: str) -> None:
+    """Progress line on stderr; the handler forwards these live to Runpod's logs."""
+    print(f"[structrfm +{time.monotonic() - _T0:7.1f}s] {msg}", file=sys.stderr, flush=True)
 
 
 class RealInferenceError(RuntimeError):
@@ -51,13 +59,31 @@ def _stub_matrix(sequence: str) -> list[list[float]]:
 
 def _real_matrix(sequence: str, checkpoint: str) -> list[list[float]]:
     """structRFM last-layer mean attention, symmetrized and min-max normalized."""
+    _log("importing torch")
+    import torch
+
+    _log(f"torch {torch.__version__}, built for CUDA {torch.version.cuda}")
+    _log("checking CUDA availability")
+    if torch.cuda.is_available():
+        cap = torch.cuda.get_device_capability(0)
+        _log(
+            f"GPU {torch.cuda.get_device_name(0)}, compute capability sm_{cap[0]}{cap[1]}; "
+            f"torch kernels for {torch.cuda.get_arch_list()}"
+        )
+    else:
+        _log("CUDA NOT available - running on CPU")
+
+    _log("importing structRFM")
     from structRFM.infer import structRFM_infer
 
+    _log(f"loading model from {checkpoint} (and moving it to the GPU)")
     model = structRFM_infer(
         from_pretrained=checkpoint,
         max_length=514, dim=768, layer=12, num_attention_heads=12,
     )
+    _log(f"model ready on {model.model.device}; running inference, length {len(sequence)}")
     feat = model.extract_feature(sequence)
+    _log("inference done; post-processing attention map")
     attn = feat["last_mean_attn_feat"].detach().float().cpu()  # L x L
     sym = 0.5 * (attn + attn.t())
     lo, hi = float(sym.min()), float(sym.max())
@@ -80,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
 
     checkpoint = os.environ.get("STRUCTRFM_CHECKPOINT")
     diag = {"ckpt_env": checkpoint, "ckpt_exists": bool(checkpoint and Path(checkpoint).exists())}
+    _log(f"start: checkpoint={checkpoint!r} exists={diag['ckpt_exists']}")
 
     if diag["ckpt_exists"]:
         # A configured real path that fails must error (not silently fall to stub).
@@ -95,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         matrix = _stub_matrix(sequence)
         engine = "stub"
 
+    _log(f"done: engine={engine}")
     Path(args.out).write_text(json.dumps({
         "sequence": sequence,
         "matrix": matrix,

@@ -20,7 +20,9 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -30,7 +32,12 @@ RUNNERS = {
     "grnade": "run_grnade.py",
     "structrfm": "run_structrfm.py",
 }
-DEFAULT_TIMEOUT_S = int(os.environ.get("WORKER_JOB_TIMEOUT_S", "900"))
+# Must stay BELOW the Runpod endpoint's execution timeout (600 s by default), so a
+# stuck job comes back as a "timeout" error carrying the runner's last log lines
+# instead of being killed silently by Runpod.
+DEFAULT_TIMEOUT_S = int(os.environ.get("WORKER_JOB_TIMEOUT_S", "540"))
+#: How many trailing stderr lines to keep for error reports.
+STDERR_TAIL_LINES = 60
 
 
 class WorkerError(Exception):
@@ -108,21 +115,10 @@ def run_job(
         env["TMPDIR"] = str(tmp)
         env["PYTHONHASHSEED"] = "0"
 
-        try:
-            proc = subprocess.run(  # noqa: S603 - argv is a fixed array, shell=False
-                argv,
-                env=env,
-                cwd=str(work),
-                capture_output=True,
-                text=True,
-                timeout=timeout_s,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise WorkerError("timeout", f"Job exceeded {timeout_s}s.") from exc
+        stdout, stderr_tail, returncode = _run_streaming(argv, env, work, timeout_s)
 
-        if proc.returncode != 0:
-            tail = (proc.stderr or proc.stdout or "").strip()[-1500:]
+        if returncode != 0:
+            tail = (stderr_tail or stdout or "").strip()[-1500:]
             raise WorkerError("worker_error", tail or "Runner exited non-zero.")
         if not out_path.exists():
             raise WorkerError("no_output", "Runner produced no output file.")
@@ -132,11 +128,65 @@ def run_job(
         except json.JSONDecodeError as exc:
             raise WorkerError("bad_output", "Runner output was not valid JSON.") from exc
 
-        report = _parse_report(proc.stdout)
-        return JobResult(outputs=outputs, runner_report=report, stdout=proc.stdout)
+        report = _parse_report(stdout)
+        return JobResult(outputs=outputs, runner_report=report, stdout=stdout)
     finally:
         if cleanup:
             shutil.rmtree(job_dir, ignore_errors=True)
+
+
+def _run_streaming(
+    argv: list[str], env: dict, cwd: Path, timeout_s: int
+) -> tuple[str, str, int]:
+    """Run the runner, echoing its stderr live to this process's stderr.
+
+    Runpod's worker logs only show what the handler process prints, so the
+    runner's progress lines (stderr) are forwarded as they arrive; stdout is
+    collected for the JSON report. Returns (stdout, stderr_tail, returncode).
+    Raises WorkerError("timeout") — with the last stderr lines — on timeout.
+    """
+    tail: deque[str] = deque(maxlen=STDERR_TAIL_LINES)
+
+    proc = subprocess.Popen(  # noqa: S603 - argv is a fixed array, shell=False
+        argv,
+        env=env,
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    def _pump_stderr() -> None:
+        assert proc.stderr is not None
+        for line in proc.stderr:
+            tail.append(line)
+            sys.stderr.write(f"[runner] {line}")
+            sys.stderr.flush()
+
+    out_chunks: list[str] = []
+
+    def _pump_stdout() -> None:
+        assert proc.stdout is not None
+        out_chunks.append(proc.stdout.read())
+
+    threads = [threading.Thread(target=f, daemon=True) for f in (_pump_stderr, _pump_stdout)]
+    for t in threads:
+        t.start()
+    try:
+        proc.wait(timeout=timeout_s)
+    except subprocess.TimeoutExpired as exc:
+        proc.kill()
+        proc.wait()
+        for t in threads:
+            t.join(timeout=5)
+        last = "".join(tail).strip()[-1500:]
+        raise WorkerError(
+            "timeout", f"Job exceeded {timeout_s}s. Last runner output:\n{last}"
+        ) from exc
+    for t in threads:
+        t.join()
+    return "".join(out_chunks), "".join(tail), proc.returncode
 
 
 def _parse_report(stdout: str) -> dict:

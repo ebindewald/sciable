@@ -6,7 +6,7 @@
   "citation": "Zhu et al., An open structure-guided RNA foundation model for generalizable prediction. Nature (2026). https://github.com/heqin-zhu/structRFM",
   "source_commit": "PENDING-M1-PIN",
   "checkpoint_digest": "PENDING-M1-PIN",
-  "worker_image_digest": "PENDING-M4-BUILD",
+  "worker_image_digest": "ghcr.io/ebindewald/structrfm-worker@sha256:20375cede0b863219a024e6ab2f718b01ecc555d0655bdc563345c99d4fcf8a7",
   "provisional": true,
   "runner": "run_structrfm.py",
   "inputs": {
