@@ -122,7 +122,8 @@ def run_job(
             raise WorkerError("timeout", f"Job exceeded {timeout_s}s.") from exc
 
         if proc.returncode != 0:
-            raise WorkerError("worker_error", "Runner exited non-zero.")
+            tail = (proc.stderr or proc.stdout or "").strip()[-1500:]
+            raise WorkerError("worker_error", tail or "Runner exited non-zero.")
         if not out_path.exists():
             raise WorkerError("no_output", "Runner produced no output file.")
 
@@ -157,7 +158,9 @@ def handler(event: dict) -> dict:
     try:
         result = run_job(event.get("input", {}))
     except WorkerError as exc:
-        return {"error": exc.category}
+        # Surface a content-free category plus the runner's error detail (stderr
+        # tail) so a failed deployment is debuggable without digging in logs.
+        return {"error": exc.category, "detail": str(exc)}
     return {
         "outputs": result.outputs,
         "report": result.runner_report,

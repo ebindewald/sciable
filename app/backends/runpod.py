@@ -96,8 +96,13 @@ class RunpodBackend:
         raw: dict = {}
         if state is RunState.SUCCEEDED and isinstance(output, dict):
             if output.get("error"):
-                # Worker reported a handled failure inside a COMPLETED job.
-                return JobStatus(state=RunState.FAILED, error_category=str(output["error"]))
+                # Worker reported a handled failure inside a COMPLETED job; keep
+                # the detail (stderr tail) in raw so the failure is debuggable.
+                return JobStatus(
+                    state=RunState.FAILED,
+                    error_category=str(output["error"]),
+                    raw={"backend": "runpod", "detail": output.get("detail")},
+                )
             outputs = dict(output.get("outputs") or {})
             raw = {"backend": "runpod", **{k: v for k, v in output.items() if k != "outputs"}}
         return JobStatus(

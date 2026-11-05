@@ -73,11 +73,17 @@ def _parse_dbn(output_dir: Path, seq_len: int) -> str:
 
 
 def _predict_real(sequence: str, script: str, checkpoint: str) -> str:
-    """Run upstream's SSP CLI (dot-bracket output) in the current (isolated) cwd."""
-    fasta = Path("query.fasta")
+    """Run upstream's SSP CLI (dot-bracket output).
+
+    Our I/O files are ABSOLUTE (they live in this job's isolated cwd), but the
+    subprocess runs with cwd = the structRFM repo root, because the upstream
+    script resolves some resources relative to the repo.
+    """
+    fasta = Path("query.fasta").resolve()
     fasta.write_text(f">query\n{sequence}\n")
-    out_dir = Path("structrfm_out")
+    out_dir = Path("structrfm_out").resolve()
     out_dir.mkdir(exist_ok=True)
+    repo_root = Path(script).resolve().parent.parent  # /opt/structRFM
 
     argv = [
         sys.executable, script,
@@ -87,9 +93,12 @@ def _predict_real(sequence: str, script: str, checkpoint: str) -> str:
         "--input_fasta", str(fasta),
         "--output_dir", str(out_dir),
     ]
-    proc = subprocess.run(argv, capture_output=True, text=True, check=False)  # noqa: S603
+    proc = subprocess.run(  # noqa: S603
+        argv, cwd=str(repo_root), capture_output=True, text=True, check=False
+    )
     if proc.returncode != 0:
-        raise RealInferenceError(f"structRFM SSP exited {proc.returncode}: {proc.stderr[-500:]}")
+        tail = (proc.stderr or proc.stdout or "").strip()[-1200:]
+        raise RealInferenceError(f"structRFM SSP exited {proc.returncode}: {tail}")
     return _parse_dbn(out_dir, len(sequence))
 
 
