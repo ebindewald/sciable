@@ -22,4 +22,7 @@ def handler(job: dict) -> dict:
     return _run_job(job)
 
 
-runpod.serverless.start({"handler": handler})
+# Guard with __main__ so Runpod's build-time import validation doesn't try to
+# start the serverless loop (which would hang or fail without a RUNPOD_API_KEY).
+if __name__ == "__main__":
+    runpod.serverless.start({"handler": handler})
