@@ -43,6 +43,18 @@ def _dot_bracket(sequence: str) -> str:
     return "(" * k + "." * (n - 2 * k) + ")" * k
 
 
+def _contact_matrix(sequence: str) -> list[list[float]]:
+    """Deterministic symmetric placeholder L×L matrix in [0,1] — not a prediction."""
+    n = len(sequence)
+    mat = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i, n):
+            h = hashlib.sha256(f"{sequence}:{i}:{j}".encode()).digest()[0]
+            v = round(h / 255, 4)
+            mat[i][j] = mat[j][i] = v
+    return mat
+
+
 class FakeBackend:
     def __init__(self) -> None:
         self._jobs: dict[str, dict] = {}
@@ -99,6 +111,23 @@ class FakeBackend:
             "model": {"name": method_id, "version": "stub", "checkpoint": "PENDING-M1-PIN"},
             "job": {"provider_job_id": provider_job_id},
         }
+        if kind == "contact_map":
+            sequence = str(inputs.get("sequence") or "")
+            matrix = _contact_matrix(sequence)
+            base_raw["job"]["length"] = len(sequence)
+            base_raw["stdout"] = "\n".join(
+                [
+                    "[stub-runner] loading sequence... ok",
+                    f"[stub-runner] extracting attention map for {len(sequence)} nt...",
+                    "[stub-runner] done.",
+                ]
+            )
+            base_raw["report"] = {"stub": True, "format": "attention_matrix"}
+            return (
+                {"sequence": sequence, "matrix": matrix, "matrix_type": "attention"},
+                base_raw,
+            )
+
         if kind == "structure":
             sequence = str(inputs.get("sequence") or "")
             structure = _dot_bracket(sequence)

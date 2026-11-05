@@ -21,7 +21,7 @@ def test_grnade_manifest_loads():
 def test_structrfm_manifest_loads():
     m = load_manifest("structrfm")
     assert m.method_id == "structrfm"
-    assert m.outputs.kind == "structure"
+    assert m.outputs.kind == "contact_map"
     assert m.inputs.field("sequence").type == "rna_sequence"
     assert m.runner == "run_structrfm.py"
 

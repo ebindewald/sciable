@@ -2,7 +2,7 @@
   "method_id": "structrfm",
   "version": "0.1.0-dev",
   "title": "structRFM — RNA secondary-structure prediction",
-  "description": "Predict the secondary structure (base pairing) of an RNA sequence with the structure-guided RNA foundation model structRFM. Output is a dot-bracket string over the input sequence; predicted pairs are a model estimate, not an experimentally determined structure.",
+  "description": "Run the structure-guided RNA foundation model structRFM on an RNA sequence and return its last-layer attention map — an L×L learned representation that correlates with base pairing (including crossing/pseudoknot interactions a nested dot-bracket would discard). It is a model representation, not a calibrated secondary-structure prediction.",
   "citation": "Zhu et al., An open structure-guided RNA foundation model for generalizable prediction. Nature (2026). https://github.com/heqin-zhu/structRFM",
   "source_commit": "PENDING-M1-PIN",
   "checkpoint_digest": "PENDING-M1-PIN",
@@ -29,8 +29,8 @@
     ]
   },
   "outputs": {
-    "kind": "structure",
-    "format": "dot_bracket"
+    "kind": "contact_map",
+    "format": "attention_matrix"
   },
   "limits": {
     "job_timeout_s": 900,
@@ -38,6 +38,6 @@
   },
   "example_ref": "methods/structrfm/example/example.fasta",
   "example_summary": "A tiny 12-nucleotide RNA hairpin (GGGGAAAACCCC), bundled so you can try the pipeline without supplying a sequence.",
-  "example_details": "A hand-picked minimal hairpin: four G-C pairs closing a four-base loop, whose textbook fold is ((((....)))). It exercises the sequence -> dot-bracket path end to end. Swap in any single RNA sequence over A/C/G/U to predict its structure. Until the real structRFM checkpoint is wired in (M1), the returned structure is a deterministic placeholder, not a structRFM prediction.",
-  "notes": "Real inference uses upstream's SSP CLI with the structRFM_SSP_bpRNA1m.pt checkpoint (GitHub release asset, MIT); see the root Dockerfile and worker/run_structrfm.py. source_commit, checkpoint_digest, worker_image_digest and the sequence max_length stay provisional (and the web UI shows a Mockup banner) until the M1 smoke run on a Runpod endpoint confirms them — flip provisional to false then. The runner reports engine=structRFM vs engine=stub so real and placeholder outputs are distinguishable."
+  "example_details": "A hand-picked minimal hairpin (GGGGAAAACCCC): four G-C pairs closing a four-base loop. It exercises the sequence -> attention-map path end to end. Swap in any single RNA sequence over A/C/G/U. Real inference returns structRFM's last-layer mean attention (an L×L matrix); the stub returns a deterministic placeholder matrix (engine=stub).",
+  "notes": "Real inference uses structRFM's programmatic API (structRFM.infer.structRFM_infer) with the base pretrained checkpoint (GitHub release structRFM_checkpoint.tar.gz, MIT) — NOT the upstream SSP script, whose imports (param_turner2004/utils) are not in the documented install. Output is the last-layer mean attention map, a learned representation that correlates with base pairing (incl. pseudoknots), not a calibrated SSP prediction; a true dot-bracket head is deferred (would need mxfold2's param_turner2004). source_commit, checkpoint_digest, worker_image_digest and max_length stay provisional until confirmed by a Runpod smoke run. The runner reports engine=structRFM vs engine=stub."
 }

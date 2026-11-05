@@ -30,7 +30,7 @@ METHODS_DIR = REPO_ROOT / "methods"
 #: Input field types the generic validator and the form renderer understand.
 FIELD_TYPES = {"rna_sequence", "pdb_structure", "text", "int"}
 #: Output kinds the storage + results views understand.
-OUTPUT_KINDS = {"sequences", "structure"}
+OUTPUT_KINDS = {"sequences", "structure", "contact_map"}
 
 
 class FieldSpec(BaseModel):

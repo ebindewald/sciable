@@ -27,12 +27,34 @@
   </table>
 
   {% if run.state == "succeeded" %}
-    {% if manifest.provisional %}
-    <p class="warn"><strong>⚠ Mockup output:</strong> a deterministic placeholder, not a
-       real {{ manifest.method_id }} prediction (pending M1). It depends only on input
-       size, not on the actual sequence/structure.</p>
+    {% if engine == "structRFM" %}
+    <p class="muted"><strong>Real structRFM output.</strong> A learned representation that
+       correlates with base pairing (including crossing/pseudoknot signal) — not a
+       calibrated secondary-structure prediction.</p>
+    {% elif manifest.provisional %}
+    <p class="warn"><strong>⚠ Mockup output:</strong> a deterministic placeholder (demo
+       backend), not a real {{ manifest.method_id }} result — it depends only on input size.</p>
     {% endif %}
-    {% if kind == "structure" %}
+    {% if kind == "contact_map" %}
+      <h2>structRFM attention map</h2>
+      <p class="muted">L×L last-layer mean attention. Off-diagonal intensity hints at
+         long-range / crossing (pseudoknot) interactions a nested dot-bracket cannot show.</p>
+      {% if heatmap_svg %}
+      <div class="rna-structure-wrap">{{ heatmap_svg | safe }}</div>
+      <p class="muted">Darker = stronger attention.</p>
+      {% else %}
+      <p class="muted">Matrix is {{ matrix_len }}×{{ matrix_len }} — too large to render
+         inline; fetch it via <a href="/api/runs/{{ run.id }}">the API</a>.</p>
+      {% endif %}
+      {% if contact_metrics %}
+      <table>
+        <tr><td>Length</td><td>{{ contact_metrics.length }} nt</td></tr>
+        <tr><td>Max attention</td><td>{{ contact_metrics.max }}</td></tr>
+        <tr><td>Mean</td><td>{{ contact_metrics.mean }}</td></tr>
+        <tr><td>Strong cells (&ge;0.8)</td><td>{{ contact_metrics.strong_cells }}</td></tr>
+      </table>
+      {% endif %}
+    {% elif kind == "structure" %}
       <h2>Predicted secondary structure</h2>
       <p class="muted">A model estimate of base pairing — not an experimentally
          determined structure.</p>

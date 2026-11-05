@@ -8,9 +8,10 @@
   {% if manifest.description %}<p>{{ manifest.description }}</p>{% endif %}
 
   {% if manifest.provisional %}
-  <p class="warn"><strong>⚠ Mockup:</strong> this method is not yet wired to the real
-     model. Submitted runs return <em>deterministic placeholder</em> output, not real
-     predictions (pending the M1 baseline — real weights + GPU inference).</p>
+  <p class="warn"><strong>⚠ Provisional (pre-baseline):</strong> digests aren't pinned and
+     results aren't yet validated against upstream. On the demo backend, outputs are
+     <em>deterministic placeholders</em>; on a configured GPU backend they are real but
+     not yet validated. Each result is labeled with which it is.</p>
   {% endif %}
 
   <form action="/api/runs" method="post" enctype="multipart/form-data">

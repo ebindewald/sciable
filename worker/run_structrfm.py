@@ -1,105 +1,69 @@
-"""structRFM secondary-structure runner (invoked as a subprocess by handler.py).
+"""structRFM attention-map runner (invoked as a subprocess by handler.py).
 
-Predicts an RNA secondary structure (dot-bracket) for a sequence.
+Runs structRFM on an RNA sequence and returns its last-layer mean attention as an
+L×L matrix — a learned representation that correlates with base pairing, including
+crossing/pseudoknot interactions a nested dot-bracket would discard. It is NOT a
+calibrated secondary-structure prediction.
+
+Why attention and not the SSP dot-bracket: upstream's SSP *script*
+(scripts/structRFM_SSP.py) imports modules not in the documented install
+(param_turner2004 — bundled only in mxfold2 — and a local `utils`), so it is not
+cleanly reproducible. We instead use the documented programmatic API
+(structRFM.infer.structRFM_infer), which depends only on the structRFM package +
+torch. A true dot-bracket head is a deferred follow-up.
 
 Two paths, chosen at runtime:
-
-* **Real inference** — when the structRFM SSP script and a fine-tuned checkpoint
-  are present (env ``STRUCTRFM_SSP_SCRIPT`` + ``STRUCTRFM_SSP_CHECKPOINT``, baked
-  into the GPU worker image), we invoke upstream's official SSP CLI with
-  ``--output_format dbn`` and parse the dot-bracket it writes. Using the upstream
-  script keeps our output faithful to structRFM by construction (the
-  "validate the adapter against upstream" step compares this to a direct run).
-      upstream: https://github.com/heqin-zhu/structRFM  (MIT)
-      checkpoint: structRFM_SSP_bpRNA1m.pt (GitHub release asset)
-
-* **Stub fallback** — when those are absent (local/CI, no GPU, no weights) we emit
-  a deterministic placeholder sized to the sequence. It is clearly marked
-  ``engine="stub"`` so nothing downstream mistakes it for a real prediction; the
-  web UI also shows a "Mockup" banner while the method manifest is provisional.
+* Real — when the base checkpoint is present (env STRUCTRFM_CHECKPOINT, baked into
+  the GPU worker image): load the model and extract the attention matrix.
+* Stub — when it is absent (local/CI, no GPU, no weights): a deterministic
+  placeholder matrix, clearly marked engine="stub".
 
 I/O contract (shared by every runner):
     --input <input.json>   {"sequence": ..., "seed": ...}
-    --out   <out.json>     {"sequence": ..., "structure": ..., "engine": ...}
-
-Isolation: this process reads only files handed to it and writes only under its
-workspace (cwd) and HOME, both of which the handler makes private per job.
+    --out   <out.json>     {"sequence", "matrix" (LxL, 0..1), "matrix_type", "engine"}
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
-
-_BRACKETS = set("().[]{}<>")
 
 
 class RealInferenceError(RuntimeError):
     """The real structRFM path was configured but failed — surface, don't fake."""
 
 
-def _stub_structure(sequence: str) -> str:
-    """Deterministic placeholder (a single hairpin): pair the outer third on each
-    side, leave the middle unpaired. Well-formed dot-bracket of the right length —
-    NOT a real structRFM prediction; depends only on length, not on the bases."""
+def _stub_matrix(sequence: str) -> list[list[float]]:
+    """Deterministic symmetric placeholder matrix in [0,1] — NOT a prediction."""
     n = len(sequence)
-    k = n // 3
-    return "(" * k + "." * (n - 2 * k) + ")" * k
+    mat: list[list[float]] = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i, n):
+            h = hashlib.sha256(f"{sequence}:{i}:{j}".encode()).digest()[0]
+            v = round(h / 255, 4)
+            mat[i][j] = mat[j][i] = v
+    return mat
 
 
-def _real_paths() -> tuple[str, str] | None:
-    """(script, checkpoint) if both are present on disk, else None (-> stub)."""
-    script = os.environ.get("STRUCTRFM_SSP_SCRIPT")
-    checkpoint = os.environ.get("STRUCTRFM_SSP_CHECKPOINT")
-    if script and checkpoint and Path(script).exists() and Path(checkpoint).exists():
-        return script, checkpoint
-    return None
+def _real_matrix(sequence: str, checkpoint: str) -> list[list[float]]:
+    """structRFM last-layer mean attention, symmetrized and min-max normalized."""
+    from structRFM.infer import structRFM_infer
 
-
-def _parse_dbn(output_dir: Path, seq_len: int) -> str:
-    """Find the dot-bracket line in the .dbn the SSP CLI wrote for our sequence."""
-    for path in sorted(output_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        for line in path.read_text().splitlines():
-            s = line.strip()
-            if s and len(s) == seq_len and set(s) <= _BRACKETS:
-                return s
-    raise RealInferenceError(f"No dot-bracket of length {seq_len} in structRFM output.")
-
-
-def _predict_real(sequence: str, script: str, checkpoint: str) -> str:
-    """Run upstream's SSP CLI (dot-bracket output).
-
-    Our I/O files are ABSOLUTE (they live in this job's isolated cwd), but the
-    subprocess runs with cwd = the structRFM repo root, because the upstream
-    script resolves some resources relative to the repo.
-    """
-    fasta = Path("query.fasta").resolve()
-    fasta.write_text(f">query\n{sequence}\n")
-    out_dir = Path("structrfm_out").resolve()
-    out_dir.mkdir(exist_ok=True)
-    repo_root = Path(script).resolve().parent.parent  # /opt/structRFM
-
-    argv = [
-        sys.executable, script,
-        "--gpu", os.environ.get("STRUCTRFM_GPU", "0"),
-        "--output_format", "dbn",
-        "--checkpoint_path", checkpoint,
-        "--input_fasta", str(fasta),
-        "--output_dir", str(out_dir),
-    ]
-    proc = subprocess.run(  # noqa: S603
-        argv, cwd=str(repo_root), capture_output=True, text=True, check=False
+    model = structRFM_infer(
+        from_pretrained=checkpoint,
+        max_length=514, dim=768, layer=12, num_attention_heads=12,
     )
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout or "").strip()[-1200:]
-        raise RealInferenceError(f"structRFM SSP exited {proc.returncode}: {tail}")
-    return _parse_dbn(out_dir, len(sequence))
+    feat = model.extract_feature(sequence)
+    attn = feat["last_mean_attn_feat"].detach().float().cpu()  # L x L
+    sym = 0.5 * (attn + attn.t())
+    lo, hi = float(sym.min()), float(sym.max())
+    if hi > lo:
+        sym = (sym - lo) / (hi - lo)
+    return [[round(float(v), 4) for v in row] for row in sym]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -111,45 +75,39 @@ def main(argv: list[str] | None = None) -> int:
     inputs = json.loads(Path(args.input).read_text())
     sequence = str(inputs.get("sequence") or "")
 
-    # Record HOME contents before writing — proves per-job HOME isolation in tests
-    # (structRFM / HF cache weights under ~/ in the real path).
     home = Path(os.path.expanduser("~"))
     seen_at_start = sorted(p.name for p in home.iterdir()) if home.exists() else []
 
-    # Diagnostics: why did we (not) take the real path? Surfaced in the report so
-    # a stub fallback on a GPU worker is explainable at a glance.
-    _script = os.environ.get("STRUCTRFM_SSP_SCRIPT")
-    _ckpt = os.environ.get("STRUCTRFM_SSP_CHECKPOINT")
-    diag = {
-        "ssp_script_env": _script,
-        "ssp_ckpt_env": _ckpt,
-        "script_exists": bool(_script and Path(_script).exists()),
-        "ckpt_exists": bool(_ckpt and Path(_ckpt).exists()),
-    }
+    checkpoint = os.environ.get("STRUCTRFM_CHECKPOINT")
+    diag = {"ckpt_env": checkpoint, "ckpt_exists": bool(checkpoint and Path(checkpoint).exists())}
 
-    real = _real_paths()
-    if real is not None:
-        # A configured real path that fails must error (not silently fall to stub),
-        # so a broken deployment surfaces as worker_error rather than fake output.
-        structure = _predict_real(sequence, *real)
+    if diag["ckpt_exists"]:
+        # A configured real path that fails must error (not silently fall to stub).
+        try:
+            matrix = _real_matrix(sequence, checkpoint)
+        except Exception as exc:  # noqa: BLE001 - surface the reason to the caller
+            raise RealInferenceError(f"structRFM attention extraction failed: {exc}") from exc
         engine = "structRFM"
     else:
         cache = home / ".structrfm_cache"
         cache.mkdir(parents=True, exist_ok=True)
         (cache / "weights.marker").write_text("stub-cache")
-        structure = _stub_structure(sequence)
+        matrix = _stub_matrix(sequence)
         engine = "stub"
 
-    Path(args.out).write_text(
-        json.dumps({"sequence": sequence, "structure": structure, "engine": engine})
-    )
+    Path(args.out).write_text(json.dumps({
+        "sequence": sequence,
+        "matrix": matrix,
+        "matrix_type": "attention",
+        "engine": engine,
+    }))
     print(json.dumps({
         "engine": engine,
         "stub": engine == "stub",
         "home": str(home),
         "seen_at_start": seen_at_start,
         "length": len(sequence),
-        "format": "dot_bracket",
+        "format": "attention_matrix",
         "diag": diag,
     }))
     return 0

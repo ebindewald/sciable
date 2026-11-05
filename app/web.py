@@ -17,9 +17,11 @@ from fastapi.templating import Jinja2Templates
 
 from app.api import (
     _primary_input_field,
+    contact_metrics,
     manifest_for_run,
     read_outputs,
     read_raw_output,
+    render_contact_heatmap,
     render_structure_svg,
     resolve_method,
     sequence_metrics,
@@ -112,12 +114,21 @@ def run_page(run_id: str, request: Request):
         "run": run,
         "manifest": manifest,
         "kind": kind,
+        "engine": outputs.get("engine"),
         "terminal": run.state in TERMINAL_STATES,
         "uncertain": uncertain,
         "raw_json": json.dumps(raw, indent=2, sort_keys=True) if raw else None,
         "raw_stdout": (raw or {}).get("stdout"),
     }
-    if succeeded and kind == "structure":
+    if succeeded and kind == "contact_map":
+        sequence = outputs.get("sequence") or ""
+        matrix = outputs.get("matrix") or []
+        ctx["sequence"] = sequence
+        ctx["matrix_type"] = outputs.get("matrix_type")
+        ctx["contact_metrics"] = contact_metrics(matrix) if matrix else None
+        ctx["heatmap_svg"] = render_contact_heatmap(sequence, matrix) if matrix else ""
+        ctx["matrix_len"] = len(matrix)
+    elif succeeded and kind == "structure":
         structure = outputs.get("structure") or ""
         sequence = outputs.get("sequence") or ""
         ctx["structure"] = structure

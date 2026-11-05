@@ -151,6 +151,59 @@ def render_structure_svg(sequence: str, structure: str) -> str:
     )
 
 
+#: Above this length we don't render an inline heatmap (too many SVG cells).
+_HEATMAP_MAX_L = 120
+
+
+def contact_metrics(matrix: list[list[float]]) -> dict:
+    """Summary of an L×L contact/attention matrix."""
+    n = len(matrix)
+    flat = [v for row in matrix for v in row]
+    strong = sum(1 for v in flat if v >= 0.8)
+    return {
+        "length": n,
+        "max": round(max(flat), 4) if flat else 0.0,
+        "mean": round(sum(flat) / len(flat), 4) if flat else 0.0,
+        "strong_cells": strong,  # cells >= 0.8 (candidate contacts, incl. off-diagonal)
+    }
+
+
+def render_contact_heatmap(sequence: str, matrix: list[list[float]]) -> str:
+    """Server-rendered L×L heatmap (sequential single-hue via cell opacity).
+
+    Off-diagonal intensity reveals long-range / crossing (pseudoknot) signal that a
+    nested dot-bracket cannot represent. Returns '' if too large to render inline."""
+    n = len(matrix)
+    if n == 0 or n > _HEATMAP_MAX_L:
+        return ""
+    cell = max(4, min(18, 360 // n))
+    pad = 14
+    size = n * cell
+    labels = n <= 40
+    cells: list[str] = []
+    for i, row in enumerate(matrix):
+        for j, v in enumerate(row):
+            v = 0.0 if v < 0 else 1.0 if v > 1 else v
+            cells.append(
+                f'<rect class="hm-cell" x="{pad + j * cell}" y="{pad + i * cell}" '
+                f'width="{cell}" height="{cell}" fill-opacity="{v:.3f}"/>'
+            )
+    ticks: list[str] = []
+    if labels:
+        for i in range(n):
+            base = sequence[i] if i < len(sequence) else "·"
+            ticks.append(
+                f'<text class="hm-base" x="{pad + i * cell + cell / 2:.1f}" '
+                f'y="{pad - 3}">{base}</text>'
+            )
+    w = size + 2 * pad
+    return (
+        f'<svg class="contact-heatmap" viewBox="0 0 {w} {w}" width="{w}" height="{w}" '
+        f'role="img" aria-label="structRFM attention map, {n}x{n}">'
+        f'{"".join(cells)}{"".join(ticks)}</svg>'
+    )
+
+
 def _public_inputs(run: Run, manifest: Manifest) -> dict:
     """Input values safe to echo back (large structure text replaced by size)."""
     pub: dict[str, Any] = {}
@@ -182,7 +235,14 @@ def serialize_run(run: Run, manifest: Manifest) -> dict:
     }
     if run.state == RunState.SUCCEEDED:
         outputs = read_outputs(run.outputs_ref)
-        if manifest.outputs.kind == "structure":
+        kind = manifest.outputs.kind
+        if kind == "contact_map":
+            body["sequence"] = outputs.get("sequence")
+            body["matrix"] = outputs.get("matrix")
+            body["matrix_type"] = outputs.get("matrix_type")
+            if outputs.get("matrix"):
+                body["metrics"] = contact_metrics(outputs["matrix"])
+        elif kind == "structure":
             body["structure"] = outputs.get("structure")
             body["sequence"] = outputs.get("sequence")
             if outputs.get("structure"):

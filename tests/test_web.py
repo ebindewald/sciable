@@ -18,7 +18,7 @@ def test_method_page_renders(client):
     assert "gRNAde" in resp.text
     assert "Submit run" in resp.text
     assert 'name="method" value="grnade"' in resp.text  # hidden method field
-    assert "Mockup" in resp.text  # provisional methods are clearly flagged
+    assert "Provisional" in resp.text  # provisional methods are clearly flagged
 
 
 def test_unknown_method_page_404(client):

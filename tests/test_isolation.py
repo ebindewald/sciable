@@ -76,15 +76,19 @@ def test_unknown_method_is_error(tmp_path):
     assert exc.value.category == "unknown_method"
 
 
-def test_structrfm_runner_produces_dot_bracket(tmp_path):
+def test_structrfm_runner_produces_matrix(tmp_path):
     result = run_job(
         {"method": "structrfm", "inputs": {"sequence": "GGGGAAAACCCC"}},
         base_dir=tmp_path,
         cleanup=False,
     )
-    assert result.outputs["sequence"] == "GGGGAAAACCCC"
-    assert set(result.outputs["structure"]) <= set("().")
-    assert len(result.outputs["structure"]) == 12
+    out = result.outputs
+    assert out["sequence"] == "GGGGAAAACCCC"
+    assert out["matrix_type"] == "attention"
+    m = out["matrix"]
+    assert len(m) == 12 and all(len(row) == 12 for row in m)
+    assert all(0.0 <= v <= 1.0 for row in m for v in row)
+    assert result.runner_report["engine"] == "stub"  # no checkpoint in CI
 
 
 def test_handler_entrypoint_shape(tmp_path, example_pdb, monkeypatch):

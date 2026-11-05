@@ -55,6 +55,12 @@
                           background: var(--rna-muted); vertical-align: baseline; }
     .rna-legend .swatch.paired { background: var(--rna-accent); }
 
+    /* Contact / attention heatmap (sequential single hue via cell opacity) */
+    svg.contact-heatmap { max-width: 100%; height: auto; }
+    svg.contact-heatmap .hm-cell { fill: var(--rna-accent); stroke: none; }
+    svg.contact-heatmap .hm-base { font-family: ui-monospace, monospace; font-size: 9px;
+                                   text-anchor: middle; fill: var(--rna-muted); }
+
     /* Method catalog (landing page) */
     ul.method-list { list-style: none; padding: 0; }
     li.method-card { border: 1px solid #8884; border-radius: 8px; padding: 0.9rem 1.1rem;

@@ -2,7 +2,7 @@
 
 Only a manifest + a runner were added; selecting it is a config flip
 (SCIABLE_METHOD=structrfm). These exercise the full lifecycle — form, generic
-submission, status, structure output — against the fake backend.
+submission, status, contact-map (attention) output — against the fake backend.
 """
 
 from __future__ import annotations
@@ -41,15 +41,17 @@ def test_catalog_and_method_page(structrfm_client):
     assert "Submit run" in page
 
 
-def test_submit_sequence_predicts_structure(structrfm_client):
+def test_submit_sequence_returns_matrix(structrfm_client):
     resp = structrfm_client.post("/api/runs", json={"sequence": "GGGGAAAACCCC", "seed": 1})
     assert resp.status_code == 201
     assert resp.json()["method"] == "structrfm"
     final = _poll(structrfm_client, resp.json()["id"])
     assert final["state"] == "succeeded"
     assert final["sequence"] == "GGGGAAAACCCC"
-    assert set(final["structure"]) <= set("().")
-    assert len(final["structure"]) == 12
+    m = final["matrix"]
+    assert len(m) == 12 and all(len(row) == 12 for row in m)
+    assert m == [list(r) for r in zip(*m, strict=True)]  # symmetric
+    assert final["matrix_type"] == "attention"
     assert final["metrics"]["length"] == 12
 
 
@@ -59,33 +61,31 @@ def test_bad_alphabet_is_422(structrfm_client):
     assert resp.json()["detail"]["code"] == "invalid_alphabet"
 
 
-def test_use_example_predicts_structure(structrfm_client):
+def test_use_example_returns_matrix(structrfm_client):
     resp = structrfm_client.post("/api/runs", json={"use_example": True})
     assert resp.status_code == 201
     final = _poll(structrfm_client, resp.json()["id"])
     assert final["state"] == "succeeded"
-    assert final["structure"]
+    assert final["matrix"]
 
 
-def test_run_page_shows_structure_diagram(structrfm_client):
+def test_run_page_shows_heatmap(structrfm_client):
     run_id = structrfm_client.post(
         "/api/runs", json={"sequence": "GGGGAAAACCCC", "seed": 1}
     ).json()["id"]
     structrfm_client.get(f"/runs/{run_id}")
     page = structrfm_client.get(f"/runs/{run_id}").text
     assert "SUCCEEDED" in page
-    assert "secondary structure" in page.lower()
-    assert "Mockup output" in page  # placeholder is clearly flagged, not passed as real
-    # The arc diagram is rendered: one <svg> with one arc per base pair.
-    assert "<svg" in page and 'class="rna-structure"' in page
-    assert page.count('class="rna-arc"') == 4  # ((((....)))) -> 4 pairs
+    assert "attention map" in page.lower()
+    assert 'class="contact-heatmap"' in page       # the heatmap SVG is rendered
+    # fake backend output has no real engine, so the placeholder banner shows
+    assert "Mockup output" in page
 
 
 def test_dot_bracket_pairs_resolves_nesting():
+    # The dot-bracket helpers stay (generic, for a future dot-bracket method).
     from app.api import dot_bracket_pairs
 
     assert dot_bracket_pairs("((((....))))") == [(0, 11), (1, 10), (2, 9), (3, 8)]
-    # Unbalanced brackets: the ')' pairs the nearest open '('; the extra '(' is
-    # dropped rather than raising.
     assert dot_bracket_pairs("((.)") == [(1, 3)]
     assert dot_bracket_pairs("....") == []
