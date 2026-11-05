@@ -66,10 +66,24 @@ def _real_matrix(sequence: str, checkpoint: str) -> list[list[float]]:
     _log("checking CUDA availability")
     if torch.cuda.is_available():
         cap = torch.cuda.get_device_capability(0)
-        _log(
-            f"GPU {torch.cuda.get_device_name(0)}, compute capability sm_{cap[0]}{cap[1]}; "
-            f"torch kernels for {torch.cuda.get_arch_list()}"
+        arch = f"sm_{cap[0]}{cap[1]}"
+        archs = torch.cuda.get_arch_list()
+        gpu = torch.cuda.get_device_name(0)
+        _log(f"GPU {gpu}, compute capability {arch}; torch kernels for {archs}")
+        # An unsupported GPU makes the first CUDA allocation hang instead of
+        # erroring, so refuse up front. Same-major SASS at or below the GPU's arch
+        # runs (e.g. sm_86 kernels on sm_89). PTX fallbacks are not trusted: the
+        # old image listed compute_37, yet hung on sm_120.
+        level = cap[0] * 10 + cap[1]
+        supported = any(
+            a.startswith(f"sm_{cap[0]}") and int(a[3:]) <= level for a in archs
         )
+        if not supported:
+            raise RealInferenceError(
+                f"GPU {torch.cuda.get_device_name(0)} ({arch}) is not supported by torch "
+                f"{torch.__version__} (kernels for {archs}). Rebuild the image on a newer "
+                f"torch or restrict the endpoint to supported GPUs."
+            )
     else:
         _log("CUDA NOT available - running on CPU")
 

@@ -15,8 +15,12 @@
 #
 # (gRNAde's separate stub worker image is worker/Dockerfile.)
 
-# torch==2.0.1 per upstream; CUDA 11.7 runtime matches that build.
-FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+# Upstream pins torch 2.0.1 (CUDA 11.7), but that build has no kernels for GPUs
+# newer than Ampere (sm_86), and Runpod hands out Blackwell (sm_120) MIG slices
+# even when the endpoint is restricted to Ampere — the job then hangs while
+# moving the model to the GPU. torch 2.7.1 + CUDA 12.8 covers sm_50..sm_120.
+# structRFM only uses plain BERT modules, so the newer torch is API-compatible.
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
 # TODO(M1): replace 'latest' with a pinned release tag + verified sha256, and pin
 # any version drift, so the image is reproducible.

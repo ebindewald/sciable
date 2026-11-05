@@ -5,7 +5,8 @@
 # environment (structRFM_environment.yaml). Upstream (MIT):
 # https://github.com/heqin-zhu/structRFM
 runpod>=1.6
-torch==2.0.1
+# torch comes from the base image (2.7.1 + CUDA 12.8); do not pin it here, or
+# pip would replace it with a build that lacks newer-GPU kernels.
 transformers==4.45.1
 structRFM
 BPfold
