@@ -58,6 +58,30 @@ build runs **unpinned** (the Dockerfile skips the checksum and prints the
 checkpoint's sha256 in the build log — grab it to pin later). Docs:
 <https://docs.runpod.io/serverless/workers/github-integration>
 
+**If the build shows "build failed" with an EMPTY log**, the failure is inside
+Runpod's builder, not in this repo (users have reported the same on unmodified
+forks of Runpod's own `worker-basic` template). Click **Rebuild** once; if it
+fails again with no log, switch to Option C and open a Runpod support ticket.
+
+### Option C (recommended fallback, no local Docker) — GitHub Actions builds, Runpod pulls
+
+`.github/workflows/build-structrfm-worker.yml` builds the root `Dockerfile` for
+`linux/amd64` on every push to `main` that touches `Dockerfile`, `handler.py` or
+`worker/` (or on manual dispatch), and pushes
+`ghcr.io/<owner>/structrfm-worker:latest` plus a `sha-<commit>` tag.
+
+1. Push the workflow; watch the run under the repo's **Actions** tab (first run
+   ~15-30 min). The job summary prints the image tags and digest.
+2. Make the package pullable by Runpod: GitHub → your profile → **Packages** →
+   `structrfm-worker` → Package settings → **Change visibility → Public**.
+   (Or keep it private and add a GHCR credential in Runpod → Settings →
+   Container Registry Auth: username = GitHub user, password = a PAT with
+   `read:packages`.)
+3. Runpod console → **Serverless → New Endpoint → Docker Image** →
+   `ghcr.io/<owner>/structrfm-worker:latest` (continue at Step 2 below).
+4. Put the printed digest in `methods/structrfm/manifest.json`
+   (`worker_image_digest`).
+
 ### Option B — build locally with Docker Desktop and push
 
 For a reproducible/pinned image, build it yourself. Replace the three pins first
