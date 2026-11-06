@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +35,10 @@ UNCERTAIN_SUBMISSION = "submit_uncertain"
 
 class RunConflictError(Exception):
     """Raised when the deployment's in-flight cap would be exceeded."""
+
+
+class RunNotCancelableError(Exception):
+    """Raised when canceling a run that is already terminal."""
 
 
 def _now() -> str:
@@ -92,7 +96,33 @@ class RunService:
         row = conn.execute("SELECT * FROM run WHERE idempotency_key = ?", (key,)).fetchone()
         return _row_to_run(row) if row else None
 
+    def _expire_uncertain(self, conn, *, run_id: str | None = None) -> None:
+        """Mark stale UNCERTAIN submissions (no provider job id) as FAILED.
+
+        Such a run has nothing to poll, so without this it would stay QUEUED
+        and hold an in-flight slot forever. ``error_category`` is kept as
+        ``submit_uncertain`` so the cause stays visible. Never resubmits."""
+        cutoff = datetime.now(UTC) - timedelta(seconds=self.settings.uncertain_submit_expiry_s)
+        query = (
+            "SELECT id, submitted_at FROM run WHERE state = ? AND error_category = ? "
+            "AND provider_job_id IS NULL"
+        )
+        params: list[Any] = [RunState.QUEUED.value, UNCERTAIN_SUBMISSION]
+        if run_id is not None:
+            query += " AND id = ?"
+            params.append(run_id)
+        now = _now()
+        for row in conn.execute(query, params).fetchall():
+            submitted = row["submitted_at"]
+            if submitted and datetime.fromisoformat(submitted) > cutoff:
+                continue
+            conn.execute(
+                "UPDATE run SET state = ?, finished_at = ? WHERE id = ? AND state = ?",
+                (RunState.FAILED.value, now, row["id"], RunState.QUEUED.value),
+            )
+
     def _in_flight_count(self, conn, deployment_id: str) -> int:
+        self._expire_uncertain(conn)
         terminal = tuple(s.value for s in TERMINAL_STATES)
         placeholders = ",".join("?" for _ in terminal)
         row = conn.execute(
@@ -126,11 +156,19 @@ class RunService:
 
             validated = validate_submission(manifest, raw=raw)
             fp = input_fingerprint(release_id, validated)
-            idem = resolve_idempotency_key(fp, idempotency_key)
+            # Scope the default key to the deployment, so a run from another
+            # backend (e.g. the fake demo) never stands in for a real one.
+            idem = resolve_idempotency_key(f"{deployment_id}:{fp}", idempotency_key)
 
             existing = self._get_by_idempotency(conn, idem)
             if existing is not None:
-                return existing  # dedupe — no second submission
+                if existing.state not in (RunState.FAILED, RunState.CANCELED):
+                    return existing  # dedupe — no second submission
+                # A failed/canceled run must not block a retry: retire its key.
+                conn.execute(
+                    "UPDATE run SET idempotency_key = ? WHERE id = ?",
+                    (f"{idem}:retired:{existing.id}", existing.id),
+                )
 
             max_in_flight = int(exec_limits.get("max_in_flight", self.settings.max_in_flight))
             if self._in_flight_count(conn, deployment_id) >= max_in_flight:
@@ -186,6 +224,8 @@ class RunService:
     def poll_run(self, run_id: str) -> Run | None:
         """Advance a run by querying the backend. No-op for terminal runs or
         uncertain submissions (which have no provider job to poll)."""
+        with get_conn(self.settings.db_path) as conn:
+            self._expire_uncertain(conn, run_id=run_id)
         run = self.get_run(run_id)
         if run is None:
             return None
@@ -207,6 +247,40 @@ class RunService:
                 (status.state.value, status.error_category, outputs_ref, finished_at, run_id),
             )
         return self.get_run(run_id)
+
+    # -- cancel ----------------------------------------------------------------
+
+    def cancel_run(self, run_id: str) -> tuple[Run, bool | None] | None:
+        """Move a non-terminal run to CANCELED, freeing its in-flight slot.
+
+        If the run has a provider job, the backend is asked to cancel it too.
+        Returns ``(run, provider_canceled)`` where ``provider_canceled`` is the
+        backend's answer, or None when there was no provider job to cancel.
+        The local state is CANCELED either way: a failed provider cancel must
+        not leave the deployment blocked. Raises RunNotCancelableError for
+        terminal runs; returns None for unknown ids."""
+        run = self.get_run(run_id)
+        if run is None:
+            return None
+        if run.state in TERMINAL_STATES:
+            raise RunNotCancelableError(f"Run '{run_id}' is already {run.state.value}.")
+
+        provider_canceled: bool | None = None
+        if run.provider_job_id is not None:
+            provider_canceled = self.backend.cancel(run.provider_job_id)
+
+        terminal = tuple(s.value for s in TERMINAL_STATES)
+        placeholders = ",".join("?" for _ in terminal)
+        with get_conn(self.settings.db_path) as conn:
+            cur = conn.execute(
+                f"UPDATE run SET state = ?, finished_at = ? "
+                f"WHERE id = ? AND state NOT IN ({placeholders})",
+                (RunState.CANCELED.value, _now(), run_id, *terminal),
+            )
+        if cur.rowcount == 0:
+            # Became terminal concurrently (e.g. a poll landed first).
+            raise RunNotCancelableError(f"Run '{run_id}' is already terminal.")
+        return self.get_run(run_id), provider_canceled
 
     def _write_outputs(self, run_id: str, outputs: dict) -> str:
         self._outputs_dir.mkdir(parents=True, exist_ok=True)

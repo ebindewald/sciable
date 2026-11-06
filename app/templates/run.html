@@ -9,10 +9,18 @@
   <p class="muted">{{ manifest.title }}</p>
   <p class="state state-{{ run.state }}">{{ run.state | upper }}</p>
 
+  {% if not terminal %}
+    <form method="post" action="/api/runs/{{ run.id }}/cancel" class="cancel-run"
+          onsubmit="return confirm('Cancel this run?');">
+      <button type="submit">Cancel run</button>
+    </form>
+  {% endif %}
+
   {% if uncertain %}
     <p class="warn">Submission outcome is uncertain — the provider may or may not have
        accepted this job. It will not be resubmitted automatically to avoid a second
-       GPU charge. Check your Runpod account before retrying.</p>
+       GPU charge. Check your Runpod account before retrying. You can cancel it to free
+       the in-flight slot; otherwise it is marked failed automatically after a while.</p>
   {% endif %}
 
   <table>

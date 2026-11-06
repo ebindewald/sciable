@@ -72,7 +72,9 @@ class RunpodBackend:
         if resp.status_code in (401, 403):
             raise BackendError("Runpod rejected the API key (check scope/validity).")
         if resp.status_code >= 400:
-            raise BackendError(f"Runpod /run failed: HTTP {resp.status_code}.")
+            raise BackendError(
+                f"Runpod /run failed: HTTP {resp.status_code}: {resp.text[:300]}"
+            )
 
         job_id = resp.json().get("id")
         if not job_id:

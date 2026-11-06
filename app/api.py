@@ -22,9 +22,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.auth import require_operator
+from app.backends.runpod import BackendError
 from app.manifest import FieldSpec, Manifest
 from app.models import Run, RunState
-from app.runs import UNCERTAIN_SUBMISSION, RunConflictError, RunService
+from app.runs import (
+    UNCERTAIN_SUBMISSION,
+    RunConflictError,
+    RunNotCancelableError,
+    RunService,
+)
 from app.validation import ValidationError
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -357,6 +363,13 @@ async def create_run(request: Request):
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "in_flight_limit", "message": str(exc)},
         ) from exc
+    except BackendError as exc:
+        # The provider rejected the submission (bad key, endpoint disabled or
+        # scaled to zero max workers, ...). Report it instead of a bare 500.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "backend_rejected", "message": str(exc)},
+        ) from exc
 
     if _wants_html(request):
         return RedirectResponse(url=f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
@@ -374,6 +387,36 @@ def get_run(run_id: str, request: Request):
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found.")
     return serialize_run(run, manifest_for_run(request, run))
+
+
+@router.post("/runs/{run_id}/cancel", dependencies=[Depends(require_operator)])
+def cancel_run(run_id: str, request: Request):
+    """Cancel a non-terminal run (also asks the provider to cancel its job, if any).
+
+    Browsers (Accept: text/html) are redirected back to the run page; API
+    clients receive the serialized run plus ``provider_cancel``:
+    ``"requested"`` / ``"failed"`` / ``"not_applicable"`` (no provider job)."""
+    service: RunService = request.app.state.run_service
+    try:
+        result = service.cancel_run(run_id)
+    except RunNotCancelableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "not_cancelable", "message": str(exc)},
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found.")
+    run, provider_canceled = result
+
+    if _wants_html(request):
+        return RedirectResponse(url=f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
+    body = serialize_run(run, manifest_for_run(request, run))
+    body["provider_cancel"] = (
+        "not_applicable"
+        if provider_canceled is None
+        else ("requested" if provider_canceled else "failed")
+    )
+    return body
 
 
 @router.get("/runs/{run_id}/raw", dependencies=[Depends(require_operator)])

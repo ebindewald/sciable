@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # bounds (sizes, counts, lengths) live in that method's manifest, not here.
     job_timeout_s: int = 900
     max_in_flight: int = 1
+    # A run whose provider submit was UNCERTAIN (no provider job id) is marked
+    # FAILED once it is older than this, so it cannot hold an in-flight slot
+    # forever. It is never resubmitted.
+    uncertain_submit_expiry_s: int = 600
 
 
 @lru_cache
