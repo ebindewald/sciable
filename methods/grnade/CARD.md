@@ -57,17 +57,18 @@ backbone* — a successful run does not validate folding or biological function.
 | Checkpoint env | `GRNADE_CHECKPOINT=/opt/grnade_ckpt/gRNAde_drop3d@0.75_maxlen@500.h5` (baked + checksummed); `GRNADE_REPO=/opt/grnade`, `GRNADE_TEMPERATURE=0.1` |
 | Entrypoint | root `handler.py`; runner `worker/run_grnade.py` (real path via upstream `src.*`; `--input/--out` contract + isolated cwd/HOME) |
 
-## Endpoint (today vs. target)
+## Endpoint
 
-- **Today:** gRNAde is seeded against the shared endpoint
-  `sciable-grnade-structrfm` / `5gyt0w5he0m4qq` — built from the **repo-root Dockerfile
-  (structRFM's image)**. That image has the gRNAde *stub* runner but no gRNAde weights
-  and no PyG/`src.*` stack, so once pushed, a real gRNAde job there **fails loudly**
-  ("Internal error: job failed" — checkpoint missing), never fakes success.
-- **Target:** give gRNAde its **own** image + endpoint (`sciable-grnade`), wired via
-  `SCIABLE_RUNPOD_ENDPOINT_IDS='{"grnade":"<endpoint-id>", ...}'`. Create it with the
-  console GitHub import, Dockerfile Path `/worker/Dockerfile.grnade`, 24 GB tier,
-  0 min / 1 max workers (`docs/ENDPOINT_SETUP.md`).
+- **gRNAde's own endpoint `sciable-grnade` / `scztvh9pjjjoz9`** is built from
+  `worker/Dockerfile.grnade` (console GitHub import, 24 GB, 0 min / 1 max). **Real
+  inference verified 2026-11-07** on image `...:f910424d6` (commit f910424): a 1ZIH
+  12-nt target returned `engine: "grnade"`, `stub: false`, checkpoint loaded, length-12
+  A/C/G/U designs, two seeds differing. Cold start ~10-14 s delay + ~5-6 s exec observed.
+- ⚠ **App routing still points grnade at the structRFM endpoint.** Set
+  `SCIABLE_RUNPOD_ENDPOINT_IDS` so `grnade` → `scztvh9pjjjoz9` (not `5gyt0w5he0m4qq`) and
+  restart the app; deployments refresh from that env on startup.
+- The old shared endpoint `sciable-grnade-structrfm` / `5gyt0w5he0m4qq` is structRFM's
+  image; a gRNAde job there fails loudly (checkpoint missing), never fakes success.
 
 ## Smoke test
 
