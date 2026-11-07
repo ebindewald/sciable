@@ -178,8 +178,10 @@ def main(argv: list[str] | None = None) -> int:
 
     checkpoint = os.environ.get("RHOFOLD_CHECKPOINT")
     ckpt_exists = bool(checkpoint and Path(checkpoint).exists())
-    diag = {"ckpt_env": checkpoint, "ckpt_exists": ckpt_exists}
-    _log(f"start: checkpoint={checkpoint!r} exists={ckpt_exists} length={len(sequence)}")
+    # Report only a boolean, never the checkpoint PATH — report + stderr both reach the
+    # operator, and absolute image/job paths are internal plumbing, not results.
+    diag = {"ckpt_exists": ckpt_exists}
+    _log(f"start: checkpoint_present={ckpt_exists} length={len(sequence)}")
 
     if ckpt_exists:
         # A configured real path that fails must error (not silently fall to stub).
@@ -218,8 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({
         "engine": engine,
         "stub": engine == "stub",
-        "home": str(home),
-        "seen_at_start": seen_at_start,
+        # Leak-free isolation signal (see run_grnade.py); never emit the absolute home path.
+        "fresh_home": not seen_at_start,
         "length": len(sequence),
         "residues": len(plddt),
         "format": "pdb",

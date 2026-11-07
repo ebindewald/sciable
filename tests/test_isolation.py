@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from worker.handler import WorkerError, run_job
@@ -22,24 +20,25 @@ def test_job_runs_in_isolated_dirs(tmp_path, example_pdb, monkeypatch):
     )
     assert len(result.outputs["sequences"]) == 3
     assert all(set(s) <= set("ACGU") for s in result.outputs["sequences"])
-    # The job's HOME is private, under the base dir — not the real $HOME.
-    assert Path(result.runner_report["home"]).is_relative_to(tmp_path)
+    # The job ran in a private HOME under the per-job base — verified on the filesystem,
+    # since the runner no longer echoes the absolute home path (it leaked the job id).
+    homes = list(tmp_path.glob("*/home"))
+    assert len(homes) == 1 and homes[0].is_dir()
+    assert result.runner_report["fresh_home"] is True  # HOME started empty
 
 
 def test_sequential_jobs_cannot_see_each_others_files(tmp_path, example_pdb, monkeypatch):
     monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
-    a = run_job(_grnade({"structure": example_pdb, "seed": 1}), base_dir=tmp_path)
-    a_home = Path(a.runner_report["home"])
+    run_job(_grnade({"structure": example_pdb, "seed": 1}), base_dir=tmp_path)  # cleanup=True
+    # A succeeded and its whole job dir (incl. its .grnade_cache) was removed on completion.
+    assert list(tmp_path.iterdir()) == []
 
     b = run_job(_grnade({"structure": example_pdb, "seed": 2}), base_dir=tmp_path, cleanup=False)
-    b_home = Path(b.runner_report["home"])
-
-    assert a_home != b_home
-    assert ".grnade_cache" not in b.runner_report["seen_at_start"]
-    assert not a_home.exists()  # A's directory was removed on completion
-
-    remaining = [p.name for p in tmp_path.iterdir()]
-    assert remaining == [b_home.parent.name]
+    # B got a fresh, private HOME that never saw A's cache.
+    assert b.runner_report["fresh_home"] is True
+    # Exactly one job dir remains — B's — with its own private HOME.
+    remaining = list(tmp_path.iterdir())
+    assert len(remaining) == 1 and (remaining[0] / "home").is_dir()
 
 
 def test_cleanup_on_failure(tmp_path, example_pdb):

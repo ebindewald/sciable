@@ -234,8 +234,11 @@ def main(argv: list[str] | None = None) -> int:
 
     checkpoint = os.environ.get("GRNADE_CHECKPOINT")
     ckpt_exists = bool(checkpoint and Path(checkpoint).exists())
-    diag = {"ckpt_env": checkpoint, "ckpt_exists": ckpt_exists}
-    _log(f"start: checkpoint={checkpoint!r} exists={ckpt_exists} count={count} seed={seed}")
+    # Report only a boolean, never the checkpoint PATH — the report and the stderr log
+    # both reach the operator (stderr tail rides along in error detail), and absolute
+    # image/job paths are internal plumbing, not results.
+    diag = {"ckpt_exists": ckpt_exists}
+    _log(f"start: checkpoint_present={ckpt_exists} count={count} seed={seed}")
 
     if ckpt_exists:
         # A configured real path that fails must error (not silently fall to stub).
@@ -273,8 +276,10 @@ def main(argv: list[str] | None = None) -> int:
         "engine": engine,
         "stub": engine == "stub",
         "chain_received": chain,
-        "home": str(home),
-        "seen_at_start": seen_at_start,
+        # Leak-free isolation signal: True means this job's HOME started empty (a fresh,
+        # private HOME that never saw a prior job's cache). The absolute home PATH — which
+        # included the per-job id and looked like a secret — is deliberately not emitted.
+        "fresh_home": not seen_at_start,
         "count": len(sequences),
         "diag": diag,
     }))

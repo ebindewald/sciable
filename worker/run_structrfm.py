@@ -119,8 +119,10 @@ def main(argv: list[str] | None = None) -> int:
     seen_at_start = sorted(p.name for p in home.iterdir()) if home.exists() else []
 
     checkpoint = os.environ.get("STRUCTRFM_CHECKPOINT")
-    diag = {"ckpt_env": checkpoint, "ckpt_exists": bool(checkpoint and Path(checkpoint).exists())}
-    _log(f"start: checkpoint={checkpoint!r} exists={diag['ckpt_exists']}")
+    # Report only a boolean, never the checkpoint PATH — report + stderr both reach the
+    # operator, and absolute image/job paths are internal plumbing, not results.
+    diag = {"ckpt_exists": bool(checkpoint and Path(checkpoint).exists())}
+    _log(f"start: checkpoint_present={diag['ckpt_exists']}")
 
     if diag["ckpt_exists"]:
         # A configured real path that fails must error (not silently fall to stub).
@@ -157,8 +159,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({
         "engine": engine,
         "stub": engine == "stub",
-        "home": str(home),
-        "seen_at_start": seen_at_start,
+        # Leak-free isolation signal (see run_grnade.py); never emit the absolute home path.
+        "fresh_home": not seen_at_start,
         "length": len(sequence),
         "format": "attention_matrix",
         "diag": diag,
