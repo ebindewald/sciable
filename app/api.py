@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.auth import require_operator
@@ -31,6 +31,7 @@ from app.runs import (
     RunNotCancelableError,
     RunService,
 )
+from app.templating import templates
 from app.validation import ValidationError
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -341,6 +342,30 @@ def _wants_html(request: Request) -> bool:
     return "text/html" in request.headers.get("accept", "")
 
 
+def _submission_error(
+    request: Request,
+    manifest: Manifest,
+    code: str,
+    message: str,
+    status_code: int,
+    headline: str,
+) -> Response:
+    """A failed submission as HTML for browsers, JSON for API clients.
+
+    A web form submit must render a page, never a raw JSON body; API clients get
+    the machine-readable ``{"detail": {"code", "message"}}`` shape and status."""
+    if _wants_html(request):
+        return templates.TemplateResponse(
+            request,
+            "error.html",
+            {"manifest": manifest, "headline": headline, "message": message},
+            status_code=status_code,
+        )
+    return JSONResponse(
+        status_code=status_code, content={"detail": {"code": code, "message": message}}
+    )
+
+
 @router.post("/runs", dependencies=[Depends(require_operator)])
 async def create_run(request: Request):
     service: RunService = request.app.state.run_service
@@ -354,22 +379,22 @@ async def create_run(request: Request):
             idempotency_key=idempotency_key,
         )
     except ValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": exc.code, "message": exc.message},
-        ) from exc
+        return _submission_error(
+            request, manifest, exc.code, exc.message,
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "That input couldn't be accepted",
+        )
     except RunConflictError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "in_flight_limit", "message": str(exc)},
-        ) from exc
+        return _submission_error(
+            request, manifest, "in_flight_limit", str(exc),
+            status.HTTP_409_CONFLICT, "A run is already in progress",
+        )
     except BackendError as exc:
         # The provider rejected the submission (bad key, endpoint disabled or
         # scaled to zero max workers, ...). Report it instead of a bare 500.
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": "backend_rejected", "message": str(exc)},
-        ) from exc
+        return _submission_error(
+            request, manifest, "backend_rejected", str(exc),
+            status.HTTP_502_BAD_GATEWAY, "The compute backend rejected the job",
+        )
 
     if _wants_html(request):
         return RedirectResponse(url=f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)

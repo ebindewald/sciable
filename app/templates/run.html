@@ -9,6 +9,11 @@
   <p class="muted">{{ manifest.title }}</p>
   <p class="state state-{{ run.state }}">{{ run.state | upper }}</p>
 
+  <p class="muted" id="elapsed-line"
+     data-start="{{ run.submitted_at or '' }}"
+     data-finished="{{ run.finished_at or '' }}"
+     data-terminal="{{ 'true' if terminal else 'false' }}"><span id="elapsed"></span></p>
+
   {% if not terminal %}
     <form method="post" action="/api/runs/{{ run.id }}/cancel" class="cancel-run"
           onsubmit="return confirm('Cancel this run?');">
@@ -131,4 +136,30 @@
   {% elif not terminal %}
     <p class="muted">This page refreshes automatically…</p>
   {% endif %}
+
+  <script>
+    (function () {
+      var line = document.getElementById("elapsed-line");
+      var out = document.getElementById("elapsed");
+      if (!line || !out) return;
+      var start = line.dataset.start ? new Date(line.dataset.start).getTime() : NaN;
+      if (isNaN(start)) { line.style.display = "none"; return; }
+      function fmt(ms) {
+        var s = Math.max(0, Math.floor(ms / 1000));
+        var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+        if (h) return h + "h " + String(m).padStart(2, "0") + "m " + String(sec).padStart(2, "0") + "s";
+        if (m) return m + "m " + String(sec).padStart(2, "0") + "s";
+        return sec + "s";
+      }
+      if (line.dataset.terminal === "true") {
+        var fin = line.dataset.finished ? new Date(line.dataset.finished).getTime() : NaN;
+        if (isNaN(fin)) { line.style.display = "none"; return; }
+        out.textContent = "Took " + fmt(fin - start);
+      } else {
+        var tick = function () { out.textContent = "Running for " + fmt(Date.now() - start); };
+        tick();
+        setInterval(tick, 1000);
+      }
+    })();
+  </script>
 {% endblock %}

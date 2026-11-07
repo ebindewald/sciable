@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Submission error — Sciable{% endblock %}
+{% block body %}
+  <h1>Couldn't start the run</h1>
+  <p class="muted">{{ manifest.title if manifest else "" }}</p>
+
+  <div class="warn">
+    <strong>{{ headline }}</strong>
+    <p style="margin:0.4rem 0 0">{{ message }}</p>
+  </div>
+
+  <p style="margin-top:1.2rem">
+    {% if manifest %}<a href="/methods/{{ manifest.method_id }}">← Back to the form</a>{% else %}<a href="/">← Back</a>{% endif %}
+  </p>
+{% endblock %}

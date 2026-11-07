@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     # forever. It is never resubmitted.
     uncertain_submit_expiry_s: int = 600
 
+    # When True, an identical resubmission (same deployment + inputs + seed)
+    # returns the EXISTING run instead of launching a new job — input-fingerprint
+    # "caching". Off by default: every submission runs fresh. An explicit client
+    # Idempotency-Key is honored regardless of this flag, so retries still cannot
+    # double-charge a GPU job.
+    dedupe_identical_inputs: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

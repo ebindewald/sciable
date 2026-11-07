@@ -73,6 +73,31 @@ def test_browser_submit_redirects_to_run_page(client, example_pdb):
     assert resp.headers["location"].startswith("/runs/")
 
 
+def test_browser_submit_error_renders_html_not_json(client, example_pdb):
+    # Fill the single in-flight slot, then resubmit: the in_flight_limit (409) must
+    # come back as an HTML page for a browser, never a raw JSON body.
+    client.post("/api/runs", json={"structure": example_pdb, "seed": 1})
+    resp = client.post(
+        "/api/runs",
+        headers=HTML,
+        files={"structure_file": ("example.pdb", example_pdb, "text/plain")},
+        data={"seed": "2"},
+    )
+    assert resp.status_code == 409
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "in progress" in resp.text  # the error template's headline
+    assert '"detail"' not in resp.text  # not a JSON error body
+
+
+def test_api_submit_error_stays_json(client, example_pdb):
+    # The same conflict for an API client (no text/html) stays machine-readable.
+    client.post("/api/runs", json={"structure": example_pdb, "seed": 1})
+    resp = client.post("/api/runs", json={"structure": example_pdb, "seed": 2})
+    assert resp.status_code == 409
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json()["detail"]["code"] == "in_flight_limit"
+
+
 def test_run_page_progresses_to_results(client, example_pdb):
     created = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}).json()
     run_id = created["id"]
@@ -80,6 +105,13 @@ def test_run_page_progresses_to_results(client, example_pdb):
     page = client.get(f"/runs/{run_id}").text
     assert "SUCCEEDED" in page
     assert "design_1" in page  # Jinja escapes the leading '>' to '&gt;'
+
+
+def test_run_page_shows_elapsed_indicator(client, example_pdb):
+    created = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}).json()
+    page = client.get(f"/runs/{created['id']}").text
+    assert 'id="elapsed"' in page
+    assert f'data-start="{created["submitted_at"]}"' in page  # client ticker reads this
 
 
 def test_run_page_404(client):

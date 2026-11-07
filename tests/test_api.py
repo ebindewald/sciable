@@ -86,9 +86,12 @@ def test_in_flight_conflict_is_409(client, example_pdb):
     assert resp.json()["detail"]["code"] == "in_flight_limit"
 
 
-def test_idempotent_resubmission_returns_same_run(client, example_pdb):
-    a = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}).json()
-    b = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}).json()
+def test_explicit_idempotency_key_returns_same_run(client, example_pdb):
+    # Dedupe is opt-in per request via an explicit key (guards against double-
+    # charging on retries); identical inputs without a key run fresh by default.
+    hdr = {"Idempotency-Key": "k1"}
+    a = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}, headers=hdr).json()
+    b = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}, headers=hdr).json()
     assert a["id"] == b["id"]
 
 

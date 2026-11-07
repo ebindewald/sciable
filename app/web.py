@@ -13,7 +13,6 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse
-from fastapi.templating import Jinja2Templates
 
 from app.api import (
     _primary_input_field,
@@ -27,13 +26,12 @@ from app.api import (
     sequence_metrics,
     structure_metrics,
 )
-from app.config import REPO_ROOT
 from app.models import TERMINAL_STATES, RunState
 from app.runs import UNCERTAIN_SUBMISSION, RunService
+from app.templating import templates
 from app.validation import _extract_sequence, parse_pdb_chains
 
 router = APIRouter(tags=["web"])
-templates = Jinja2Templates(directory=str(REPO_ROOT / "app" / "templates"))
 
 
 def _example_info(manifest) -> dict | None:

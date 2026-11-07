@@ -24,7 +24,7 @@ from typing import Any
 from app.backends.base import Backend, JobSpec, SubmitStatus
 from app.config import Settings
 from app.db import get_conn
-from app.fingerprint import input_fingerprint, resolve_idempotency_key
+from app.fingerprint import input_fingerprint
 from app.manifest import Manifest
 from app.models import TERMINAL_STATES, Run, RunState
 from app.validation import ValidationError, validate_submission
@@ -156,19 +156,30 @@ class RunService:
 
             validated = validate_submission(manifest, raw=raw)
             fp = input_fingerprint(release_id, validated)
-            # Scope the default key to the deployment, so a run from another
-            # backend (e.g. the fake demo) never stands in for a real one.
-            idem = resolve_idempotency_key(f"{deployment_id}:{fp}", idempotency_key)
+            # Decide the idempotency key. An explicit client key is always honored
+            # (so a retry cannot double-charge a GPU job). Absent one, we only reuse
+            # a prior run when dedupe_identical_inputs is on; by default every
+            # submission runs fresh — the common case in development, where the same
+            # input is deliberately run again. The default key is scoped to the
+            # deployment so a run from another backend (e.g. the fake demo) never
+            # stands in for a real one.
+            if idempotency_key:
+                idem: str | None = idempotency_key
+            elif self.settings.dedupe_identical_inputs:
+                idem = f"{deployment_id}:{fp}"
+            else:
+                idem = None  # no dedupe — this submission gets its own run
 
-            existing = self._get_by_idempotency(conn, idem)
-            if existing is not None:
-                if existing.state not in (RunState.FAILED, RunState.CANCELED):
-                    return existing  # dedupe — no second submission
-                # A failed/canceled run must not block a retry: retire its key.
-                conn.execute(
-                    "UPDATE run SET idempotency_key = ? WHERE id = ?",
-                    (f"{idem}:retired:{existing.id}", existing.id),
-                )
+            if idem is not None:
+                existing = self._get_by_idempotency(conn, idem)
+                if existing is not None:
+                    if existing.state not in (RunState.FAILED, RunState.CANCELED):
+                        return existing  # dedupe — no second submission
+                    # A failed/canceled run must not block a retry: retire its key.
+                    conn.execute(
+                        "UPDATE run SET idempotency_key = ? WHERE id = ?",
+                        (f"{idem}:retired:{existing.id}", existing.id),
+                    )
 
             max_in_flight = int(exec_limits.get("max_in_flight", self.settings.max_in_flight))
             if self._in_flight_count(conn, deployment_id) >= max_in_flight:
