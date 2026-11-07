@@ -22,7 +22,7 @@ on:
       - worker/requirements-rhofold.txt
       - worker/run_rhofold.py
       - worker/handler.py
-      - worker/serverless_entry.py
+      - handler.py
       - .github/workflows/build-rhofold-worker.yml
   workflow_dispatch:
     inputs:

@@ -96,6 +96,13 @@ hook needed (structRFM, RhoFold added none). Add one in
 
 See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example.
 
+> ⚠ **Phase B builds from GitHub, not your working tree.** Both the GHA workflow and
+> Runpod's GitHub import build the image from the **pushed commit** — so **commit + push
+> first**, and treat every later `worker/` change the same way: push → rebuild the image →
+> update the endpoint to the new image. Unpushed edits (a new runner, a `handler.py
+> RUNNERS` line, a Dockerfile fix) never reach a running endpoint — the job keeps failing
+> with `unknown_method` against the stale image. This is exactly how rhofold kept failing.
+
 ### B1. Pin the three things (reproducibility)
 - **Upstream commit** → `source_commit` and the Dockerfile build-arg (never ship
   `main`/`master`).
@@ -113,10 +120,11 @@ See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example
   `pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime` and **do not pin torch** in
   requirements (pip would replace it with a kernel-less build). Keep the runner's
   fail-fast GPU arch check.
-- ⚠ **Root Dockerfile is single-use**: Runpod auto-detects only the repo-root
-  `Dockerfile` (structRFM's). A second method uses its own
-  `worker/Dockerfile.<id>` built via **GitHub Actions → GHCR** (Option C), not
-  Runpod's GitHub auto-build.
+- ⚠ **Second-method Dockerfile**: the repo-root `Dockerfile` is structRFM's, so a new
+  method uses its own `worker/Dockerfile.<id>`. Runpod's GitHub import now has a
+  **Dockerfile Path** field (enter `worker/Dockerfile.<id>`, Branch `main`) — so you can
+  still let Runpod build from GitHub (no GHCR). GitHub Actions → GHCR is the fallback.
+  (The old "root Dockerfile only / no subpath" limitation is gone.)
 - ⚠ **Dep drift**: upstream's py3.7 pins (`numpy==1.21.2`, …) won't build on the
   py3.11 base. Use modern compatible versions; pin what the first build proves. (See
   the `pyarrow==17` note in `requirements-structrfm.txt` for the flavor of surprise.)
@@ -129,8 +137,17 @@ See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example
 - **Done when:** the job summary shows the image + digest.
 
 ### B4. Endpoint + live run
-- Runpod → Serverless → **New Endpoint → Docker Image** → the GHCR ref.
-  **0 min / 1 max workers** (dev-budget rule — no idle GPU spend).
+- ⚠ **Manual step in the Runpod web console — nothing in the repo creates the
+  endpoint.** You do this by hand; skipping it is a common cause of "it still fails."
+- Runpod → Serverless → **New Endpoint → Docker Image** → in **Container Image** enter the
+  GHCR *image ref* (e.g. `ghcr.io/<owner>/<id>-worker:latest`), **not** a URL. (The GHCR
+  package must be **Public**, or add a Runpod registry credential, or the pull fails.)
+  **0 min / 1 max workers** (dev-budget rule — no idle GPU spend). Copy the **endpoint id**.
+- The app wants that **endpoint id** (not a URL): `SCIABLE_RUNPOD_ENDPOINT_IDS='{"<id>":"<endpoint-id>"}'`
+  (or `SCIABLE_METHOD=<id>` + `SCIABLE_RUNPOD_ENDPOINT_ID=<endpoint-id>`); it builds
+  `https://api.runpod.ai/v2/<endpoint-id>/run` itself. **If the endpoint doesn't exist /
+  the id is wrong → Runpod 404 → `BackendError` (API 502); if it points at another
+  method's endpoint → `unknown_method`.**
 - ⚠ **Each method needs an endpoint whose image serves it.** `bootstrap.py` points
   every deployment at the single `SCIABLE_RUNPOD_ENDPOINT_ID`; reuse another method's
   endpoint and its image's `handler.py RUNNERS` won't have your runner → the job returns

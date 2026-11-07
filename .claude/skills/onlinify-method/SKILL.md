@@ -104,13 +104,16 @@ Summarize in this shape:
 - The 5 scoping facts + any default you chose and why.
 - Phase A: files added/changed, `pytest` result (counts).
 - Any **license or compatibility risk** flagged (e.g. torch-2.7 API-compat unverified).
-- Phase B handoff: the ordered checklist (pin → verify weights license → build via GHA →
-  **its own endpoint** → smoke run **(confirm the endpoint actually serves this method —
-  a reused/stale image returns `error: unknown_method` in ~70ms)** → validate → un-flag →
-  teardown) and which doc to follow. Each method needs an endpoint whose image includes
-  its runner + weights; `bootstrap.py` defaults every deployment to the one
-  `SCIABLE_RUNPOD_ENDPOINT_ID`, so reusing another method's endpoint silently fails.
-  (Debugging a failed run: `/onlinify-debug`.)
+- Phase B handoff: the ordered checklist (**commit + push the worker code** → pin →
+  verify weights license → build via GHA → make the GHCR package public → **manually create its own Runpod endpoint (Docker Image flow) in the web console — nothing in the repo does this** → point the app at that endpoint id → smoke run **(confirm
+  the endpoint actually serves this method — a reused/stale image returns
+  `error: unknown_method` in ~70ms)** → validate → un-flag → teardown) and which doc to
+  follow. Each method needs an endpoint whose image includes its runner + weights;
+  `bootstrap.py` defaults every deployment to the one `SCIABLE_RUNPOD_ENDPOINT_ID`, so
+  reusing another method's endpoint silently fails. **The image builds from GitHub HEAD,
+  not your working tree — unpushed `worker/` edits (a new runner, a `handler.py RUNNERS`
+  line) never reach the endpoint; every worker-code change needs push → rebuild →
+  redeploy.** (Debugging a failed run: `/onlinify-debug`.)
 - The run command to drive it locally now on the fake backend:
   `SCIABLE_METHOD=<id> uvicorn app.main:app --port 8099`.
 

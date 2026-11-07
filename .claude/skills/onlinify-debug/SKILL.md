@@ -107,6 +107,20 @@ and a method only works if that endpoint's image (a) has the method in
 `RUNNERS` **and** (b) has its weights baked in. Always check: does
 `deployment.endpoint_ref` point at an image that actually serves this method?
 
+**And the image builds from GitHub HEAD, not your working tree.** If you edited
+`worker/` (a new runner, a `handler.py RUNNERS` line, a Dockerfile fix) but didn't
+**commit + push** and then rebuild + redeploy the endpoint, the endpoint still runs the
+old image → `unknown_method`. First triage for a method that "should work now": is the
+deployed image built from the latest pushed commit? (`unknown_method` after a local fix =
+almost always an unpushed/unrebuilt image.)
+
+**Endpoint existence is a manual, human step** (Runpod web console, Docker Image flow) —
+nothing in the repo creates it. If it was never created, or `SCIABLE_RUNPOD_ENDPOINT_ID(S)`
+points at a non-existent id → Runpod `/run` returns **404 → `BackendError` → API 502**. If
+it points at *another method's* endpoint → **`unknown_method`**. Check: does a Runpod
+endpoint for this method actually exist, built from this method's image, and does the app's
+endpoint id match it?
+
 ## Known gaps worth fixing (don't rediscover these)
 
 1. `app/backends/runpod.py` `status()` discards `output.error`/`output.detail`

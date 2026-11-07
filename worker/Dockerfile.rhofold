@@ -77,6 +77,10 @@ RUN python -c "import os; from huggingface_hub import snapshot_download; \
        fi
 
 COPY worker/ /opt/worker/worker/
+# Root handler.py is the entrypoint — the form Runpod's GitHub handler detection
+# expects (same as the structRFM root Dockerfile). It's method-agnostic (dispatches
+# via worker.handler), so it covers rhofold; no separate worker/serverless_entry.py.
+COPY handler.py /opt/worker/handler.py
 
 # Non-root; writable per-job root owned by the run user.
 # Own the job root; also the checkpoint dir, since offline snapshot_download may
@@ -86,5 +90,6 @@ RUN useradd --create-home --uid 10001 worker \
     && chown -R worker:worker /var/lib/sciable /opt/rhofold_ckpt
 USER worker
 
-# Runpod Serverless entrypoint.
-CMD ["python", "-m", "worker.serverless_entry"]
+# Runpod Serverless entrypoint: root handler.py with runpod.serverless.start()
+# (the form Runpod's handler detection looks for), matching the structRFM image.
+CMD ["python", "-u", "handler.py"]

@@ -31,9 +31,30 @@ Phase B.
 
 ---
 
-## Step 1 — Build the worker image (GitHub Actions → GHCR)
+## Step 1 — Build the worker image
 
-RhoFold **cannot** use Runpod's root-Dockerfile auto-detect — that slot is structRFM's.
+RhoFold's recipe is `worker/Dockerfile.rhofold` (not the repo-root `Dockerfile`, which is
+structRFM's). Two no-local-Docker ways to build it; **Option A is simplest.**
+
+### Option A (recommended) — Runpod builds from GitHub, no GHCR
+
+Runpod's GitHub integration now has a **Dockerfile Path** field, so a non-root Dockerfile
+works (the old "no Dockerfile found at that path" limitation is gone):
+
+1. Push the repo (already done if your `worker/` changes are on `main`).
+2. Runpod → Serverless → **New Endpoint → Import Git Repository** → connect GitHub →
+   pick the repo → **Branch:** `main` → **Dockerfile Path:** `worker/Dockerfile.rhofold`
+   (build context is the repo root, so the `COPY worker/...` lines resolve). Do **not**
+   add a `.runpod/hub.json` (keeps you off the public Hub).
+3. Runpod builds + stores the image and creates the endpoint (continue at Step 2 below).
+
+Caveats: 30-min build limit (clone upstream + torch 2.7 + full checkpoint snapshot — watch
+it); first build is unpinned (`RHOFOLD_COMMIT=main`, checksum skipped with a warning — grab
+the printed sha to pin later); if the build fails with an **empty log** it's Runpod's
+builder — Rebuild once, else use Option B.
+
+### Option B (fallback) — GitHub Actions → GHCR → "Docker Image"
+
 Build `worker/Dockerfile.rhofold` via Actions and have Runpod pull from GHCR.
 
 1. The workflow `.github/workflows/build-rhofold-worker.yml` builds on every push to
