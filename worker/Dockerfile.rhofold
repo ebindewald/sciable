@@ -66,7 +66,9 @@ RUN git clone https://github.com/ml4bio/RhoFold /opt/rhofold \
 # inference.py downloads into. Using snapshot_download at BUILD time (not a single
 # wget) also bakes the .cache/huggingface metadata that offline mode checks, so the
 # unconditional runtime snapshot_download resolves locally with no network.
-RUN python -c "import os; from huggingface_hub import snapshot_download; \
+# HF_HUB_OFFLINE=0 here only: the ENV above sets offline mode for RUNTIME, but it
+# would also block this build-time download (the 2026-11-07 GHA failure).
+RUN HF_HUB_OFFLINE=0 python -c "import os; from huggingface_hub import snapshot_download; \
       snapshot_download(repo_id='${RHOFOLD_CKPT_REPO}', local_dir='/opt/rhofold_ckpt')" \
     && test -f "${RHOFOLD_CHECKPOINT}" \
     && if [ "${RHOFOLD_CKPT_SHA256}" = "REPLACE_WITH_VERIFIED_SHA256" ]; then \
