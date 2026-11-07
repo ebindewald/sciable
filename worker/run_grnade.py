@@ -38,7 +38,6 @@ its workspace (cwd) and HOME, both of which the handler makes private per job.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import sys
@@ -80,13 +79,11 @@ class RealInferenceError(RuntimeError):
 
 
 def _design(pdb_text: str, chain: str, seed: str, count: int, length: int = 24) -> list[str]:
-    """Deterministic placeholder sequences — NOT gRNAde. Stub path only."""
-    base = f"{pdb_text}|{chain}|{seed}".encode()
-    out: list[str] = []
-    for i in range(count):
-        digest = hashlib.sha256(base + f"|{i}".encode()).digest()
-        out.append("".join(_RNA[b % 4] for b in digest[:length]))
-    return out
+    """Deliberately DUMB placeholder designs — NOT gRNAde: one homopolymer per design,
+    cycling A/C/G/U (AAA.., CCC.., GGG.., UUU..), so stub output is obvious to anyone (no
+    real design is a run of a single base). Inputs are ignored on purpose; kept
+    byte-identical to app.backends.fake._sequences. Stub path only."""
+    return [_RNA[i % 4] * length for i in range(count)]
 
 
 def _filter_chain(pdb_text: str, chain: str) -> str:

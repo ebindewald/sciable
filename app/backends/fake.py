@@ -25,13 +25,14 @@ _RNA_ALPHABET = "ACGU"
 
 
 def _sequences(fingerprint: str, design_count: int, length: int = 24) -> list[str]:
-    """Deterministic pseudo-sequences derived from the input fingerprint."""
-    out: list[str] = []
-    for i in range(design_count):
-        digest = hashlib.sha256(f"{fingerprint}:{i}".encode()).digest()
-        seq = "".join(_RNA_ALPHABET[b % 4] for b in digest[:length])
-        out.append(seq)
-    return out
+    """Deliberately DUMB placeholder designs: one homopolymer per design, cycling
+    A/C/G/U (AAA.., CCC.., GGG.., UUU..). Obvious to anyone that these are NOT real
+    designs — no inverse-folding output is a run of a single base — so stub output
+    can't be mistaken for real even if every honesty flag (engine, provisional, the
+    fake-backend banner) failed at once. The ``fingerprint`` is ignored on purpose:
+    varying, plausible-looking stubs were exactly what fooled people. Kept
+    byte-identical to worker.run_grnade._design."""
+    return [_RNA_ALPHABET[i % 4] * length for i in range(design_count)]
 
 
 def _dot_bracket(sequence: str) -> str:
