@@ -121,6 +121,13 @@ class RunService:
                 (RunState.FAILED.value, now, row["id"], RunState.QUEUED.value),
             )
 
+    def _deployment_endpoint_ref(self, deployment_id: str) -> str:
+        with get_conn(self.settings.db_path) as conn:
+            row = conn.execute(
+                "SELECT endpoint_ref FROM deployment WHERE id = ?", (deployment_id,)
+            ).fetchone()
+        return row["endpoint_ref"] if row else ""
+
     def _in_flight_count(self, conn, deployment_id: str) -> int:
         self._expire_uncertain(conn)
         terminal = tuple(s.value for s in TERMINAL_STATES)
@@ -243,7 +250,9 @@ class RunService:
         if run.state in TERMINAL_STATES or run.provider_job_id is None:
             return run
 
-        status = self.backend.status(run.provider_job_id)
+        status = self.backend.status(
+            run.provider_job_id, self._deployment_endpoint_ref(run.deployment_id)
+        )
         outputs_ref = run.outputs_ref
         if status.state is RunState.SUCCEEDED and status.outputs:
             outputs_ref = self._write_outputs(run_id, status.outputs)
@@ -282,7 +291,9 @@ class RunService:
 
         provider_canceled: bool | None = None
         if run.provider_job_id is not None:
-            provider_canceled = self.backend.cancel(run.provider_job_id)
+            provider_canceled = self.backend.cancel(
+                run.provider_job_id, self._deployment_endpoint_ref(run.deployment_id)
+            )
 
         terminal = tuple(s.value for s in TERMINAL_STATES)
         placeholders = ",".join("?" for _ in terminal)

@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.backends.runpod import RunpodBackend
+from app.bootstrap import ensure_seeded
 from app.config import Settings
 from app.db import get_conn
 from app.main import create_app
@@ -141,12 +142,14 @@ def _runpod_service(settings, manifest, calls, cancel_status=200):
 
     rp_settings = settings.model_copy(update={"backend": "runpod", "runpod_endpoint_id": "ep123"})
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    return RunService(rp_settings, manifest, RunpodBackend(rp_settings, client=client))
+    service = RunService(rp_settings, manifest, RunpodBackend(rp_settings, client=client))
+    # Seed the runpod-backend deployment: routing follows the DEPLOYMENT's
+    # endpoint_ref (ep123 here), not a startup-bound global setting.
+    return service, ensure_seeded(rp_settings, manifest)
 
 
 def test_cancel_calls_runpod_cancel(run_service, settings, manifest, example_pdb, runpod_calls):
-    _, deployment_id = run_service
-    service = _runpod_service(settings, manifest, runpod_calls)
+    service, deployment_id = _runpod_service(settings, manifest, runpod_calls)
     run = service.create_run(deployment_id=deployment_id, raw={"structure": example_pdb, "seed": 1})
     assert service.poll_run(run.id).state == RunState.RUNNING
 
@@ -166,8 +169,7 @@ def test_cancel_calls_runpod_cancel(run_service, settings, manifest, example_pdb
 def test_runpod_cancel_failure_still_cancels_locally(
     run_service, settings, manifest, example_pdb, runpod_calls
 ):
-    _, deployment_id = run_service
-    service = _runpod_service(settings, manifest, runpod_calls, cancel_status=500)
+    service, deployment_id = _runpod_service(settings, manifest, runpod_calls, cancel_status=500)
     run = service.create_run(deployment_id=deployment_id, raw={"structure": example_pdb, "seed": 1})
 
     canceled, provider_canceled = service.cancel_run(run.id)

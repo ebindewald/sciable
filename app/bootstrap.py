@@ -58,6 +58,7 @@ def ensure_seeded(settings: Settings, manifest: Manifest) -> str:
                 release.created_at,
             ),
         )
+        endpoint_ref = _endpoint_ref(settings, manifest)
         conn.execute(
             """
             INSERT OR IGNORE INTO deployment
@@ -68,11 +69,18 @@ def ensure_seeded(settings: Settings, manifest: Manifest) -> str:
             (
                 deployment_id,
                 release.id,
-                _endpoint_ref(settings, manifest),
+                endpoint_ref,
                 json.dumps(exec_limits),
                 settings.runpod_api_key_env,
                 _now(),
             ),
+        )
+        # The operator's endpoint mapping lives in config; a deployment seeded
+        # under an older config must follow it, or runs keep routing to a stale
+        # endpoint (whose image may silently serve this method's STUB).
+        conn.execute(
+            "UPDATE deployment SET endpoint_ref = ? WHERE id = ? AND endpoint_ref <> ?",
+            (endpoint_ref, deployment_id, endpoint_ref),
         )
     return deployment_id
 

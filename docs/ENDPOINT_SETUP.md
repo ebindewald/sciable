@@ -81,6 +81,7 @@ hosts the image privately in your account.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `unknown_method` in ~100 ms | endpoint serves the wrong image (Dockerfile Path not set, or app points at wrong endpoint id) | redo step 2; check `SCIABLE_RUNPOD_ENDPOINT_IDS` |
+| "Internal error: job failed — …CHECKPOINT is unset…" | job reached an image that has this method's runner but not its checkpoint (misrouted deployment) | fix the endpoint mapping; never set `SCIABLE_ALLOW_STUB` on a real endpoint — it exists so CI can run the stub, and leaving it unset is what turns misrouting into this loud failure instead of a fake success |
 | `ModuleNotFoundError` in traceback | missing dep in `worker/requirements-<method>.txt` — upstream repos import things unconditionally | scan ALL upstream module-level imports (checklist B2a), add the dep, push, auto-rebuild |
 | job stuck `IN_QUEUE`, worker exists | container crash loop | read worker logs (console or `/onlinify-debug`) |
 | job stuck `IN_QUEUE`, no worker | no GPU capacity in the selection | tick more card types / pools |

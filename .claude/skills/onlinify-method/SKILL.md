@@ -75,7 +75,10 @@ Follow checklist steps A1–A5, copying the closest existing method:
 3. New output kind across the 4 touch points (only if Step 2 said so). The fake-backend
    placeholder **must be byte-identical** to the runner's stub generator.
 4. `worker/run_<id>.py` — `--input/--out` JSON; **real-vs-stub branch gated on the
-   checkpoint env var**; real path **raises on failure, never falls back to stub**; keep
+   checkpoint env var**; real path **raises on failure, never falls back to stub**; a
+   **missing checkpoint fails loudly** ("Internal error: job failed …") unless
+   `SCIABLE_ALLOW_STUB=1` (CI/tests only — never bake it into an image; a silent stub
+   "success" twice masked a misrouted deployment, 2026-11-07); keep
    the fail-fast GPU arch check. Add the `RUNNERS` line in `worker/handler.py`.
 5. Tests: `tests/test_<id>.py` (copy `tests/test_rhofold.py`) + a stub-path case in
    `tests/test_isolation.py`.

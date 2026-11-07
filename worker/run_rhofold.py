@@ -188,6 +188,19 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # noqa: BLE001 - surface the reason to the caller
             raise RealInferenceError(f"RhoFold inference failed: {exc}") from exc
         engine = "rhofold"
+    elif os.environ.get("SCIABLE_ALLOW_STUB") != "1":
+        # Refuse to fake a prediction. A worker without its checkpoint is a
+        # misconfigured deployment (wrong image or endpoint), and a stub
+        # "success" here has twice masked exactly that (2026-11-07). The stub
+        # stays available for CI/dev, but only on explicit opt-in.
+        print(
+            "Internal error: job failed — RHOFOLD_CHECKPOINT is unset or the file "
+            "is missing, so this image cannot run real rhofold inference (wrong "
+            "image/endpoint for this method?). Stub fallback is disabled outside "
+            "CI/dev; set SCIABLE_ALLOW_STUB=1 to permit it.",
+            file=sys.stderr,
+        )
+        return 1
     else:
         cache = home / ".rhofold_cache"
         cache.mkdir(parents=True, exist_ok=True)

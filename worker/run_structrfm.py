@@ -129,6 +129,17 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # noqa: BLE001 - surface the reason to the caller
             raise RealInferenceError(f"structRFM attention extraction failed: {exc}") from exc
         engine = "structRFM"
+    elif os.environ.get("SCIABLE_ALLOW_STUB") != "1":
+        # Refuse to fake a prediction — same rule as run_rhofold.py: a missing
+        # checkpoint means a misconfigured deployment, not a stub "success".
+        print(
+            "Internal error: job failed — STRUCTRFM_CHECKPOINT is unset or the "
+            "file is missing, so this image cannot run real structRFM inference "
+            "(wrong image/endpoint for this method?). Stub fallback is disabled "
+            "outside CI/dev; set SCIABLE_ALLOW_STUB=1 to permit it.",
+            file=sys.stderr,
+        )
+        return 1
     else:
         cache = home / ".structrfm_cache"
         cache.mkdir(parents=True, exist_ok=True)

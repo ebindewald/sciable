@@ -76,7 +76,8 @@ def test_unknown_method_is_error(tmp_path):
     assert exc.value.category == "unknown_method"
 
 
-def test_structrfm_runner_produces_matrix(tmp_path):
+def test_structrfm_runner_produces_matrix(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
     result = run_job(
         {"method": "structrfm", "inputs": {"sequence": "GGGGAAAACCCC"}},
         base_dir=tmp_path,
@@ -91,7 +92,8 @@ def test_structrfm_runner_produces_matrix(tmp_path):
     assert result.runner_report["engine"] == "stub"  # no checkpoint in CI
 
 
-def test_rhofold_runner_produces_pdb(tmp_path):
+def test_rhofold_runner_produces_pdb(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
     seq = "GGCACUUCGGUGCC"
     result = run_job(
         {"method": "rhofold", "inputs": {"sequence": seq}},
@@ -110,6 +112,21 @@ def test_rhofold_runner_produces_pdb(tmp_path):
     assert len(out["plddt"]) == len(seq)
     assert all(40.0 <= v <= 95.0 for v in out["plddt"])
     assert result.runner_report["residues"] == len(seq)
+
+
+@pytest.mark.parametrize("method", ["rhofold", "structrfm"])
+def test_missing_checkpoint_fails_without_stub_opt_in(tmp_path, monkeypatch, method):
+    """No checkpoint + no explicit stub opt-in = a loud failure, never a fake
+    success. (A misrouted job on the wrong image was twice reported 'succeeded'
+    with stub output before this gate — 2026-11-07.)"""
+    monkeypatch.delenv("SCIABLE_ALLOW_STUB", raising=False)
+    with pytest.raises(WorkerError) as exc:
+        run_job(
+            {"method": method, "inputs": {"sequence": "GGCC"}},
+            base_dir=tmp_path,
+        )
+    assert exc.value.category == "worker_error"
+    assert "Internal error: job failed" in str(exc.value)
 
 
 def test_handler_entrypoint_shape(tmp_path, example_pdb, monkeypatch):

@@ -103,7 +103,7 @@ class FakeBackend:
         }
         return SubmitResult(status=SubmitStatus.ACCEPTED, provider_job_id=job_id)
 
-    def status(self, provider_job_id: str) -> JobStatus:
+    def status(self, provider_job_id: str, endpoint_ref: str = "fake-endpoint") -> JobStatus:
         job = self._jobs.get(provider_job_id)
         if job is None:
             return JobStatus(state=RunState.FAILED, error_category="unknown_job")
@@ -196,7 +196,7 @@ class FakeBackend:
         base_raw["report"] = {"stub": True, "alphabet": "ACGU"}
         return {"sequences": sequences}, base_raw
 
-    def cancel(self, provider_job_id: str) -> bool:
+    def cancel(self, provider_job_id: str, endpoint_ref: str = "fake-endpoint") -> bool:
         job = self._jobs.get(provider_job_id)
         if job is None:
             return False

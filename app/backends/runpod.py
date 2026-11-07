@@ -42,26 +42,32 @@ class BackendError(Exception):
 
 class RunpodBackend:
     def __init__(self, settings: Settings, client: httpx.Client | None = None) -> None:
-        endpoint = settings.runpod_endpoint_for(settings.method)
-        if not endpoint:
-            raise BackendError(
-                f"No Runpod endpoint for method '{settings.method}': set "
-                "SCIABLE_RUNPOD_ENDPOINT_ID, or SCIABLE_RUNPOD_ENDPOINT_IDS with an "
-                "entry for this method."
-            )
         api_key = os.environ.get(settings.runpod_api_key_env)
         if not api_key:
             raise BackendError(
                 f"Runpod API key not found in env var '{settings.runpod_api_key_env}'."
             )
-        self._endpoint = endpoint
-        self._base = f"{settings.runpod_base_url.rstrip('/')}/{self._endpoint}"
+        self._base_url = settings.runpod_base_url.rstrip("/")
         self._client = client or httpx.Client(
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=settings.runpod_http_timeout_s,
         )
 
+    def _base(self, endpoint_ref: str) -> str:
+        # The endpoint comes from the run's DEPLOYMENT, not from the active-method
+        # setting: binding one endpoint at startup routed cross-method submissions
+        # to the wrong image, where the runner's stub fallback turned the
+        # misconfiguration into a silent fake success (rhofold, 2026-11-07).
+        if not endpoint_ref or endpoint_ref == "PENDING-ENDPOINT-ID":
+            raise BackendError(
+                "Deployment has no Runpod endpoint: set SCIABLE_RUNPOD_ENDPOINT_IDS "
+                "with an entry for this method (or SCIABLE_RUNPOD_ENDPOINT_ID) and "
+                "restart the server."
+            )
+        return f"{self._base_url}/{endpoint_ref}"
+
     def submit(self, job: JobSpec) -> SubmitResult:
+        base = self._base(job.endpoint_ref)
         payload = {
             "input": {
                 "method": job.method_id,
@@ -69,7 +75,7 @@ class RunpodBackend:
             }
         }
         try:
-            resp = self._client.post(f"{self._base}/run", json=payload)
+            resp = self._client.post(f"{base}/run", json=payload)
         except (httpx.TimeoutException, httpx.TransportError):
             # The request may or may not have reached Runpod — do not resubmit.
             return SubmitResult(status=SubmitStatus.UNCERTAIN)
@@ -86,8 +92,8 @@ class RunpodBackend:
             raise BackendError("Runpod /run returned no job id.")
         return SubmitResult(status=SubmitStatus.ACCEPTED, provider_job_id=job_id)
 
-    def status(self, provider_job_id: str) -> JobStatus:
-        resp = self._client.get(f"{self._base}/status/{provider_job_id}")
+    def status(self, provider_job_id: str, endpoint_ref: str) -> JobStatus:
+        resp = self._client.get(f"{self._base(endpoint_ref)}/status/{provider_job_id}")
         if resp.status_code == 404:
             # Job TTL expired or unknown id.
             return JobStatus(state=RunState.FAILED, error_category="expired_or_unknown")
@@ -129,9 +135,9 @@ class RunpodBackend:
             state=state, outputs=outputs, error_category=error_category, raw=raw
         )
 
-    def cancel(self, provider_job_id: str) -> bool:
+    def cancel(self, provider_job_id: str, endpoint_ref: str) -> bool:
         try:
-            resp = self._client.post(f"{self._base}/cancel/{provider_job_id}")
+            resp = self._client.post(f"{self._base(endpoint_ref)}/cancel/{provider_job_id}")
         except (httpx.TimeoutException, httpx.TransportError):
             return False
         return resp.status_code < 400
