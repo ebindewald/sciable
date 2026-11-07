@@ -43,7 +43,7 @@ def settings(tmp_path: Path) -> Settings:
 
 @pytest.fixture
 def manifest():
-    return get_manifest()
+    return get_manifest("grnade")
 
 
 @pytest.fixture

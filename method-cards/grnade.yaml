@@ -1,0 +1,26 @@
+# Method card — the portable, shareable brief for a sciable method.
+# Authored by whoever wants the method; drop it in and run `/onlinify-method`.
+# Share it on GitHub so others can integrate the same method on THEIR Runpod.
+# This file is the human brief ONLY — no implementation/deployment specifics.
+# The agent's integration findings (gotchas, decisions, this-build notes) go in the
+# deploy doc: deploy-docs/GRNADE_DEPLOY.md.
+
+slug: grnade
+name: gRNAde
+description: Design candidate RNA sequences for a target 3D backbone (PDB) — inverse folding.
+
+# Links: any list of URLs (code, papers, checkpoints, ...). A short trailing
+# comment per link (role, license, citation) is helpful but optional.
+links:
+  - https://github.com/chaitjo/geometric-rna-design   # code — verify code + weights licenses before publishing
+  - https://arxiv.org/abs/2305.14749                  # paper: Joshi et al., gRNAde: Geometric Deep Learning for 3D RNA inverse design
+
+tags: [RNA, inverse-folding, sequence-design, 3D-structure, geometric-deep-learning]
+
+notes-for-agent: >
+  Input is one PDB with a single RNA chain (auto-detect the chain when unambiguous);
+  expose design_count (default 5, cap 10) and a seed, and return the designs as FASTA.
+  Frame outputs as candidates for the supplied backbone — a successful run validates
+  neither folding nor biological function. Pin one upstream commit and one checkpoint
+  (pre-bake + checksum if upstream auto-downloads), and validate against upstream on
+  the same fixture/seed: output count, A/C/G/U alphabet, length vs the processed target.

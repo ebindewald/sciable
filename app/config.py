@@ -27,9 +27,10 @@ class Settings(BaseSettings):
     # Backend: "fake" (default) or "runpod"
     backend: str = "fake"
 
-    # Active method id — selects which methods/<id>/manifest.json is served.
-    # Both methods live in the registry; this is a config flip, not a code change.
-    method: str = "grnade"
+    # There is deliberately NO "active/default method" setting: the landing page
+    # lists every method in the registry, the user picks a form, and every
+    # submission (web or API) must name its method explicitly. A server-side
+    # default silently routed submissions to the wrong method twice (2026-11-07).
 
     # Secret *reference* only — the name of the env var holding the Runpod key.
     runpod_api_key_env: str = "RUNPOD_API_KEY"

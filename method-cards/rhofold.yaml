@@ -1,0 +1,24 @@
+# Method card — the portable, shareable brief for a sciable method.
+# Authored by whoever wants the method; drop it in and run `/onlinify-method`.
+# Share it on GitHub so others can integrate the same method on THEIR Runpod.
+# This file is the human brief ONLY — no implementation/deployment specifics.
+# The agent's integration findings (gotchas, decisions, this-build notes) go in the
+# deploy doc: deploy-docs/RHOFOLD_DEPLOY.md.
+
+slug: rhofold
+name: RhoFold+
+description: Predict a 3D structure (PDB + per-residue pLDDT) from a single RNA sequence.
+
+# Links: any list of URLs (code, papers, checkpoints, ...). A short trailing
+# comment per link (role, license, citation) is helpful but optional.
+links:
+  - https://github.com/ml4bio/RhoFold              # code (Apache-2.0)
+  - https://doi.org/10.1038/s41592-024-02487-0     # paper: Shen et al., Nature Methods 2024
+  - https://huggingface.co/cuhkaih/rhofold         # checkpoint: rhofold_pretrained_params.pt
+
+tags: [RNA, 3D structure, single-sequence, language-model]
+
+notes-for-agent: >
+  By default RhoFold takes an MSA (a3m) as input; here use the single-sequence option
+  (inference.py --single_seq_pred True) so no MSA/network is needed and job isolation
+  holds. Add an in-browser 3D structure viewer to the result page.

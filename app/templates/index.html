@@ -9,9 +9,15 @@
     {% for m in methods %}
     <li class="method-card">
       <a href="/methods/{{ m.method_id }}"><strong>{{ m.title }}</strong></a>
+      {% if m.mockup %}<span class="mockup-badge">MOCKUP</span>{% endif %}
       <div class="muted">{{ m.method_id }} · v{{ m.version }}
-        {% if m.provisional %}· <strong>provisional (pre-baseline)</strong>{% endif %}
+        {% if m.provisional and not m.mockup %}· <strong>provisional (pre-baseline)</strong>{% endif %}
         · output: {{ m.outputs.kind }}</div>
+      {% if m.mockup %}
+      <p class="mockup"><strong>Mockup — not a real implementation.</strong> This method has
+         no model behind it yet; every run returns a deterministic placeholder, not a real
+         {{ m.method_id }} result.</p>
+      {% endif %}
       {% if m.description %}<p>{{ m.description }}</p>{% endif %}
       <a href="/methods/{{ m.method_id }}">Open &rarr;</a>
     </li>

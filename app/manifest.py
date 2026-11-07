@@ -22,7 +22,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.config import REPO_ROOT, get_settings
+from app.config import REPO_ROOT
 from app.models import MethodRelease
 
 METHODS_DIR = REPO_ROOT / "methods"
@@ -85,6 +85,11 @@ class Manifest(BaseModel):
     checkpoint_digest: str
     worker_image_digest: str
     provisional: bool = False
+    #: True when the method has NO real implementation — the runner emits a
+    #: deterministic placeholder on EVERY backend (not just the fake one), so a
+    #: "successful" run is not a real result. Distinct from ``provisional`` (real
+    #: but not yet pin-validated). Surfaced as a prominent MOCKUP badge in the UI.
+    mockup: bool = False
     #: One-line description of what the method does, shown on the form page.
     description: str | None = None
     #: Runner script (under worker/) the handler invokes for this method.
@@ -144,6 +149,6 @@ def discover_manifests() -> dict[str, Manifest]:
 
 
 @lru_cache
-def get_manifest(method_id: str | None = None) -> Manifest:
-    """The active method's manifest. ``method_id`` defaults to ``settings.method``."""
-    return load_manifest(method_id or get_settings().method)
+def get_manifest(method_id: str) -> Manifest:
+    """One method's manifest by id (cached). There is no default method."""
+    return load_manifest(method_id)

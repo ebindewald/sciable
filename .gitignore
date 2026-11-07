@@ -27,3 +27,9 @@ venv/
 build/
 dist/
 .gstack/
+
+# Per-method deploy docs — implementation/instance-specific agent findings; kept
+# local, never shared (the shareable brief is method-cards/<slug>.yaml). The dir is
+# tracked via .gitkeep so the structure exists on a fresh clone.
+deploy-docs/*
+!deploy-docs/.gitkeep

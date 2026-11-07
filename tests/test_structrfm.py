@@ -18,7 +18,7 @@ from app.main import create_app
 
 @pytest.fixture
 def structrfm_client(tmp_path) -> Iterator[TestClient]:
-    settings = Settings(db_path=tmp_path / "s.db", backend="fake", method="structrfm")
+    settings = Settings(db_path=tmp_path / "s.db", backend="fake")
     with TestClient(create_app(settings)) as c:
         yield c
 
@@ -42,7 +42,9 @@ def test_catalog_and_method_page(structrfm_client):
 
 
 def test_submit_sequence_returns_matrix(structrfm_client):
-    resp = structrfm_client.post("/api/runs", json={"sequence": "GGGGAAAACCCC", "seed": 1})
+    resp = structrfm_client.post(
+        "/api/runs", json={"method": "structrfm", "sequence": "GGGGAAAACCCC", "seed": 1}
+    )
     assert resp.status_code == 201
     assert resp.json()["method"] == "structrfm"
     final = _poll(structrfm_client, resp.json()["id"])
@@ -56,13 +58,13 @@ def test_submit_sequence_returns_matrix(structrfm_client):
 
 
 def test_bad_alphabet_is_422(structrfm_client):
-    resp = structrfm_client.post("/api/runs", json={"sequence": "GGGZZZCCC"})
+    resp = structrfm_client.post("/api/runs", json={"method": "structrfm", "sequence": "GGGZZZCCC"})
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "invalid_alphabet"
 
 
 def test_use_example_returns_matrix(structrfm_client):
-    resp = structrfm_client.post("/api/runs", json={"use_example": True})
+    resp = structrfm_client.post("/api/runs", json={"method": "structrfm", "use_example": True})
     assert resp.status_code == 201
     final = _poll(structrfm_client, resp.json()["id"])
     assert final["state"] == "succeeded"
@@ -71,7 +73,7 @@ def test_use_example_returns_matrix(structrfm_client):
 
 def test_run_page_shows_heatmap(structrfm_client):
     run_id = structrfm_client.post(
-        "/api/runs", json={"sequence": "GGGGAAAACCCC", "seed": 1}
+        "/api/runs", json={"method": "structrfm", "sequence": "GGGGAAAACCCC", "seed": 1}
     ).json()["id"]
     structrfm_client.get(f"/runs/{run_id}")
     page = structrfm_client.get(f"/runs/{run_id}").text

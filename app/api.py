@@ -323,14 +323,23 @@ def _example_text(manifest: Manifest) -> str:
 
 
 def resolve_method(request: Request, submitted: str | None) -> Manifest:
-    """Pick the manifest for a request — the submitted method, else the default."""
+    """Resolve the submitted method name. There is NO default: the landing page
+    is the chooser, and an API submission must name its method explicitly."""
     manifests: dict[str, Manifest] = request.app.state.manifests
-    method = submitted or request.app.state.default_method
-    manifest = manifests.get(method)
+    if not submitted:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "missing_method",
+                "message": "Submission must name a 'method'. "
+                f"Available: {', '.join(sorted(manifests))}.",
+            },
+        )
+    manifest = manifests.get(submitted)
     if manifest is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "unknown_method", "message": f"No method '{method}'."},
+            detail={"code": "unknown_method", "message": f"No method '{submitted}'."},
         )
     return manifest
 
@@ -515,3 +524,22 @@ def get_run_raw(run_id: str, request: Request, download: bool = False):
             },
         )
     return raw
+
+
+@router.get("/runs/{run_id}/structure.pdb", dependencies=[Depends(require_operator)])
+def get_run_pdb(run_id: str, request: Request):
+    """The predicted 3D structure as a downloadable PDB file (structure_3d runs)."""
+    service: RunService = request.app.state.run_service
+    run = service.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found.")
+    pdb = read_outputs(run.outputs_ref).get("pdb")
+    if not pdb:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No PDB structure for this run."
+        )
+    return Response(
+        content=pdb,
+        media_type="chemical/x-pdb",
+        headers={"Content-Disposition": f'attachment; filename="run-{run_id[:8]}.pdb"'},
+    )

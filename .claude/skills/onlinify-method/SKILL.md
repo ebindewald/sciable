@@ -13,8 +13,8 @@ a method = **a manifest + a runner + one `RUNNERS` line**. This skill executes t
 pattern end to end, with sensible defaults so it needs minimal supervision.
 
 **Authoritative runbook:** `docs/METHOD_INTEGRATION_CHECKLIST.md` — read it first; this
-file is the operational wrapper. Worked examples: `docs/RHOFOLD_DEPLOY.md`,
-`docs/STRUCTRFM_DEPLOY.md`. Reference methods to copy: `methods/rhofold/`,
+file is the operational wrapper. Worked examples: `deploy-docs/RHOFOLD_DEPLOY.md`,
+`deploy-docs/STRUCTRFM_DEPLOY.md`. Reference methods to copy: `methods/rhofold/`,
 `methods/structrfm/`, `worker/run_rhofold.py`, `worker/run_structrfm.py`.
 
 `$ARGUMENTS` is the target model — a repo URL, a package name, or a prose name
@@ -33,6 +33,19 @@ into one `AskUserQuestion`):
   and a dot-bracket — which is the headline output?).
 - A **license risk** you surfaced (weights license unclear/non-redistributable).
 Everything else: pick the documented default, state it, proceed.
+
+## Step 0 — The method card (read first, write back at the end)
+
+Each method has a card at `method-cards/<slug>.yaml` — the **portable, shareable brief**
+that drives integration (distinct from the machine-facing `methods/<slug>/manifest.json`).
+If the operator created one, **read it first**: `notes-for-agent` is their intent and
+constraints (e.g. "use single-sequence mode, add a 3D viewer"), alongside `description`,
+`links`, `tags`. If none exists, create it from `$ARGUMENTS`. **Keep the card a clean brief
+— no implementation/deployment specifics** (it gets shared on GitHub so others run the same
+method on their own Runpod). Your integration findings — paper/license status,
+runtime-download traps, unconditional imports, entrypoint quirks, GPU/torch base — go in
+the **deploy doc `deploy-docs/<SLUG>_DEPLOY.md`**, not the card. See `method-cards/rhofold.yaml`
+for the brief shape.
 
 ## Step 1 — Verify upstream (never trust memory)
 
@@ -85,7 +98,7 @@ Follow checklist steps A1–A5, copying the closest existing method:
 
 **Gate:** run `ruff check . && pytest`. Iterate until fully green. **Then actually run
 the server and exercise it by hand** — pytest alone misses manifest/serialization/UI
-glitches: `SCIABLE_BACKEND=fake SCIABLE_METHOD=<id> uvicorn app.main:app --port 8099`,
+glitches: `SCIABLE_BACKEND=fake uvicorn app.main:app --port 8099`, open `/methods/<id>`,
 submit the example (UI form or `curl -XPOST /api/runs`), open the run page, confirm the
 output renders and the Mockup banner shows. (Fake backend = stub, so this proves the
 control plane, not the GPU path.) Do not proceed to Phase B until both pass. This is the
@@ -102,7 +115,7 @@ Produce, with `PENDING`/`REPLACE_WITH_VERIFIED_SHA256` placeholders:
   root Dockerfile — that's structRFM's). Runpod builds it when the operator creates the
   endpoint via the console GitHub import (`docs/ENDPOINT_SETUP.md`); there is no CI
   build file to emit.
-- `docs/<ID>_DEPLOY.md` — copy the structRFM/RhoFold deploy doc; the operator's Phase B
+- `deploy-docs/<ID>_DEPLOY.md` — copy the structRFM/RhoFold deploy doc; the operator's Phase B
   runbook (pin, endpoint per `docs/ENDPOINT_SETUP.md` at 0/1 workers, prove real≠stub
   via `raw.engine`, validate vs upstream, flip `provisional:false`, teardown).
 
@@ -125,7 +138,8 @@ Summarize in this shape:
   line) never reach the endpoint; every worker-code change needs push → rebuild →
   redeploy.** (Debugging a failed run: `/onlinify-debug`.)
 - The run command to drive it locally now on the fake backend:
-  `SCIABLE_METHOD=<id> uvicorn app.main:app --port 8099`.
+  `SCIABLE_BACKEND=fake uvicorn app.main:app --port 8099` → `/methods/<id>`.
+  (There is no SCIABLE_METHOD/default method — every submission names its method.)
 
 ## Guardrails (from CLAUDE.md / AGENTS.md — non-negotiable)
 - **One golden path, no inventions** (`docs/ENDPOINT_SETUP.md` "What NOT to do"):

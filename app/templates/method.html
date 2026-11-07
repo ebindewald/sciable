@@ -2,12 +2,19 @@
 {% block title %}{{ manifest.title }}{% endblock %}
 {% block body %}
   <p><a href="/">&larr; All methods</a></p>
-  <h1>{{ manifest.title }}</h1>
+  <h1>{{ manifest.title }}
+    {% if manifest.mockup %}<span class="mockup-badge">MOCKUP</span>{% endif %}</h1>
   <p class="muted">{{ manifest.method_id }} · v{{ manifest.version }}
-     {% if manifest.provisional %}· <strong>provisional (pre-baseline)</strong>{% endif %}</p>
+     {% if manifest.provisional and not manifest.mockup %}· <strong>provisional (pre-baseline)</strong>{% endif %}</p>
   {% if manifest.description %}<p>{{ manifest.description }}</p>{% endif %}
 
-  {% if manifest.provisional %}
+  {% if manifest.mockup %}
+  <p class="mockup"><strong>⚠ MOCKUP — not a real implementation.</strong> There is no
+     {{ manifest.method_id }} model behind this form yet. Every submission returns a
+     <em>deterministic placeholder</em> on <em>every</em> backend (GPU included), so a
+     "successful" run is <strong>not a real result</strong>. The form and pipeline are real
+     so the method can be wired up later.</p>
+  {% elif manifest.provisional %}
   <p class="warn"><strong>⚠ Provisional (pre-baseline):</strong> digests aren't pinned and
      results aren't yet validated against upstream. On the demo backend, outputs are
      <em>deterministic placeholders</em>; on a configured GPU backend they are real but

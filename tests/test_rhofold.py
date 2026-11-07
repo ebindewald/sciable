@@ -21,7 +21,7 @@ EXAMPLE_SEQ = "GGCACUUCGGUGCC"
 
 @pytest.fixture
 def rhofold_client(tmp_path) -> Iterator[TestClient]:
-    settings = Settings(db_path=tmp_path / "s.db", backend="fake", method="rhofold")
+    settings = Settings(db_path=tmp_path / "s.db", backend="fake")
     with TestClient(create_app(settings)) as c:
         yield c
 
@@ -45,7 +45,9 @@ def test_catalog_and_method_page(rhofold_client):
 
 
 def test_submit_sequence_returns_pdb(rhofold_client):
-    resp = rhofold_client.post("/api/runs", json={"sequence": EXAMPLE_SEQ, "seed": 1})
+    resp = rhofold_client.post(
+        "/api/runs", json={"method": "rhofold", "sequence": EXAMPLE_SEQ, "seed": 1}
+    )
     assert resp.status_code == 201
     assert resp.json()["method"] == "rhofold"
     final = _poll(rhofold_client, resp.json()["id"])
@@ -68,18 +70,18 @@ def test_submit_sequence_returns_pdb(rhofold_client):
 
 
 def test_bad_alphabet_is_422(rhofold_client):
-    resp = rhofold_client.post("/api/runs", json={"sequence": "GGGZZZCCC"})
+    resp = rhofold_client.post("/api/runs", json={"method": "rhofold", "sequence": "GGGZZZCCC"})
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "invalid_alphabet"
 
 
 def test_too_long_is_rejected(rhofold_client):
-    resp = rhofold_client.post("/api/runs", json={"sequence": "A" * 201})
+    resp = rhofold_client.post("/api/runs", json={"method": "rhofold", "sequence": "A" * 201})
     assert resp.status_code == 422
 
 
 def test_use_example_returns_pdb(rhofold_client):
-    resp = rhofold_client.post("/api/runs", json={"use_example": True})
+    resp = rhofold_client.post("/api/runs", json={"method": "rhofold", "use_example": True})
     assert resp.status_code == 201
     final = _poll(rhofold_client, resp.json()["id"])
     assert final["state"] == "succeeded"
@@ -89,7 +91,7 @@ def test_use_example_returns_pdb(rhofold_client):
 
 def test_run_page_shows_structure(rhofold_client):
     run_id = rhofold_client.post(
-        "/api/runs", json={"sequence": EXAMPLE_SEQ, "seed": 1}
+        "/api/runs", json={"method": "rhofold", "sequence": EXAMPLE_SEQ, "seed": 1}
     ).json()["id"]
     rhofold_client.get(f"/runs/{run_id}")
     page = rhofold_client.get(f"/runs/{run_id}").text

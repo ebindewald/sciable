@@ -48,11 +48,15 @@
   {% endif %}
 
   {% if run.state == "succeeded" %}
-    {% if engine == "structRFM" %}
+    {% if manifest.mockup %}
+    <p class="mockup"><strong>⚠ MOCKUP output:</strong> a deterministic placeholder, not a
+       real {{ manifest.method_id }} result. This method has no model behind it yet — the
+       output depends only on input size and must not be used as a prediction.</p>
+    {% elif engine == "structRFM" %}
     <p class="muted"><strong>Real structRFM output.</strong> A learned representation that
        correlates with base pairing (including crossing/pseudoknot signal) — not a
        calibrated secondary-structure prediction.</p>
-    {% elif manifest.provisional %}
+    {% elif engine == "stub" or manifest.provisional %}
     <p class="warn"><strong>⚠ Mockup output:</strong> a deterministic placeholder (demo
        backend), not a real {{ manifest.method_id }} result — it depends only on input size.</p>
     {% endif %}
@@ -108,8 +112,37 @@
       <h2>Predicted 3D structure</h2>
       <p class="muted">A model-predicted 3D fold for the sequence — a candidate, not an
          experimentally determined structure, and a successful run does not validate
-         biological function. Per-residue <strong>pLDDT</strong> is the model's own
-         confidence (0–100; higher = more confident).</p>
+         biological function. Colored by per-residue <strong>pLDDT</strong> (the model's
+         own confidence, 0–100): blue = high, red = low.</p>
+      {% if pdb %}
+      <div id="mol3d" class="mol3d"></div>
+      <p class="muted mol3d-legend">
+        pLDDT <span class="plddt-hi">■ high</span> ·
+        <span class="plddt-mid">■ medium</span> ·
+        <span class="plddt-lo">■ low</span> &nbsp;— drag to rotate, scroll to zoom.</p>
+      <p><a class="btn-download" href="/api/runs/{{ run.id }}/structure.pdb">⬇ Download PDB</a></p>
+      <script type="text/plain" id="pdbdata">{{ pdb }}</script>
+      <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+      <script>
+        (function () {
+          var data = document.getElementById("pdbdata");
+          var box = document.getElementById("mol3d");
+          if (!data || !box) return;
+          if (typeof $3Dmol === "undefined") {
+            box.innerHTML = '<p class="muted" style="padding:1em">3D viewer unavailable ' +
+              '(could not load 3Dmol.js). Use “Download PDB” and open it in a molecular viewer.</p>';
+            return;
+          }
+          var viewer = $3Dmol.createViewer(box, { backgroundColor: "white" });
+          viewer.addModel(data.textContent, "pdb");
+          var scheme = { prop: "b", gradient: "roygb", min: 0, max: 100 }; // b-factor = pLDDT; high→blue
+          viewer.setStyle({}, { cartoon: { colorscheme: scheme } });
+          viewer.addStyle({}, { stick: { radius: 0.12, colorscheme: scheme } });
+          viewer.zoomTo();
+          viewer.render();
+        })();
+      </script>
+      {% endif %}
       {% if struct3d_metrics %}
       <table>
         <tr><td>Length</td><td>{{ struct3d_metrics.length }} nt</td></tr>
@@ -118,10 +151,8 @@
         <tr><td>pLDDT range</td><td>{{ struct3d_metrics.plddt_min }}–{{ struct3d_metrics.plddt_max }}</td></tr>
       </table>
       {% endif %}
-      <p class="muted">Fetch the full PDB via
-         <a href="/api/runs/{{ run.id }}">the API</a>.</p>
       <details>
-        <summary>PDB coordinates</summary>
+        <summary>PDB coordinates (text)</summary>
         <pre class="structure">{{ pdb }}</pre>
       </details>
     {% else %}

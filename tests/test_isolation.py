@@ -13,7 +13,8 @@ def _grnade(inputs: dict) -> dict:
     return {"method": "grnade", "inputs": inputs}
 
 
-def test_job_runs_in_isolated_dirs(tmp_path, example_pdb):
+def test_job_runs_in_isolated_dirs(tmp_path, example_pdb, monkeypatch):
+    monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
     result = run_job(
         _grnade({"structure": example_pdb, "chain": "A", "design_count": 3, "seed": 1}),
         base_dir=tmp_path,
@@ -25,7 +26,8 @@ def test_job_runs_in_isolated_dirs(tmp_path, example_pdb):
     assert Path(result.runner_report["home"]).is_relative_to(tmp_path)
 
 
-def test_sequential_jobs_cannot_see_each_others_files(tmp_path, example_pdb):
+def test_sequential_jobs_cannot_see_each_others_files(tmp_path, example_pdb, monkeypatch):
+    monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
     a = run_job(_grnade({"structure": example_pdb, "seed": 1}), base_dir=tmp_path)
     a_home = Path(a.runner_report["home"])
 
@@ -57,7 +59,8 @@ def test_missing_output_is_error(tmp_path, example_pdb):
     assert exc.value.category == "no_output"
 
 
-def test_args_passed_as_array_no_shell_injection(tmp_path, example_pdb):
+def test_args_passed_as_array_no_shell_injection(tmp_path, example_pdb, monkeypatch):
+    monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
     sentinel = tmp_path / "pwned"
     malicious_chain = f"A; touch {sentinel}"
     result = run_job(
@@ -114,7 +117,7 @@ def test_rhofold_runner_produces_pdb(tmp_path, monkeypatch):
     assert result.runner_report["residues"] == len(seq)
 
 
-@pytest.mark.parametrize("method", ["rhofold", "structrfm"])
+@pytest.mark.parametrize("method", ["rhofold", "structrfm", "grnade"])
 def test_missing_checkpoint_fails_without_stub_opt_in(tmp_path, monkeypatch, method):
     """No checkpoint + no explicit stub opt-in = a loud failure, never a fake
     success. (A misrouted job on the wrong image was twice reported 'succeeded'
@@ -131,6 +134,7 @@ def test_missing_checkpoint_fails_without_stub_opt_in(tmp_path, monkeypatch, met
 
 def test_handler_entrypoint_shape(tmp_path, example_pdb, monkeypatch):
     monkeypatch.setenv("WORKER_WORK_ROOT", str(tmp_path / "jobs"))
+    monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
     from worker.handler import handler
 
     res = handler({"input": _grnade({"structure": example_pdb, "design_count": 2, "seed": 9})})

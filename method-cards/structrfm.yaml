@@ -1,0 +1,27 @@
+# Method card — the portable, shareable brief for a sciable method.
+# Authored by whoever wants the method; drop it in and run `/onlinify-method`.
+# Share it on GitHub so others can integrate the same method on THEIR Runpod.
+# This file is the human brief ONLY — no implementation/deployment specifics.
+# The agent's integration findings (gotchas, decisions, this-build notes) go in the
+# deploy doc: deploy-docs/STRUCTRFM_DEPLOY.md.
+
+slug: structrfm
+name: structRFM
+description: Compute an L×L attention map (correlates with base pairing, incl. pseudoknots) from a single RNA sequence.
+
+# Links: any list of URLs (code, papers, checkpoints, ...). A short trailing
+# comment per link (role, license, citation) is helpful but optional.
+links:
+  - https://github.com/heqin-zhu/structRFM              # code (MIT)
+  - https://doi.org/10.1101/2025.08.06.668731           # paper: Zhu et al., Nature 2026 (bioRxiv preprint)
+  - https://github.com/heqin-zhu/structRFM/releases     # checkpoint: structRFM_checkpoint.tar.gz (base pretrained)
+
+tags: [RNA, secondary-structure, foundation-model, attention-map, single-sequence]
+
+notes-for-agent: >
+  Use the programmatic structRFM.infer API with the base pretrained checkpoint, NOT the
+  upstream SSP script (its imports aren't in the documented install). Return the
+  last-layer mean attention map, symmetrized and min-max normalized to 0..1, rendered
+  as a heatmap on the result page. Present it as a learned representation that
+  correlates with base pairing — not a calibrated secondary-structure prediction;
+  no pairing cutoff is calibrated. Input: one RNA sequence over A/C/G/U (+N).

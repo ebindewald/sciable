@@ -66,7 +66,10 @@ hosts the image privately in your account.
 - **Wire the app:**
   ```bash
   SCIABLE_RUNPOD_ENDPOINT_IDS='{"<method>":"<endpoint-id>"}' \
-  SCIABLE_BACKEND=runpod SCIABLE_METHOD=<method> uvicorn app.main:app --port 8099
+  SCIABLE_BACKEND=runpod uvicorn app.main:app --port 8099
+  # then open / — the landing page lists every method; each form names its method.
+  # There is NO SCIABLE_METHOD / default method: every submission (web or API)
+  # carries an explicit "method" field; omitting it is a 422.
   ```
 - **Smoke test** (direct, before the app):
   ```bash

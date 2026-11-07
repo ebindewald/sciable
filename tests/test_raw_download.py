@@ -4,7 +4,9 @@ from __future__ import annotations
 
 
 def _run_to_terminal(client, example_pdb):
-    rid = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}).json()["id"]
+    rid = client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 1}
+    ).json()["id"]
     for _ in range(6):
         if client.get(f"/api/runs/{rid}").json()["state"] in ("succeeded", "failed"):
             break

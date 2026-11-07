@@ -76,12 +76,14 @@ def run_job(
 ) -> JobResult:
     """Run one job in an isolated subprocess.
 
-    ``job_input`` keys: ``method`` (defaults to ``grnade``) and ``inputs`` (the
-    validated input values dict). ``runner`` overrides the method->script lookup
-    (used in tests). Raises :class:`WorkerError` on any failure; the job directory
-    is always removed afterwards (unless ``cleanup=False``).
+    ``job_input`` keys: ``method`` (required — there is no default) and ``inputs``
+    (the validated input values dict). ``runner`` overrides the method->script
+    lookup (used in tests). Raises :class:`WorkerError` on any failure; the job
+    directory is always removed afterwards (unless ``cleanup=False``).
     """
-    method = job_input.get("method") or "grnade"
+    method = job_input.get("method")
+    if not method:
+        raise WorkerError("unknown_method", "Job input names no 'method'.")
     inputs = job_input.get("inputs") or {}
     if runner is None:
         runner_name = RUNNERS.get(method)

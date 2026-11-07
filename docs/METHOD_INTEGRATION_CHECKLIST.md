@@ -17,6 +17,13 @@ Runpod account. Ship A, review, then do B.
 Fill these in; they determine every edit below. (Have an agent verify the upstream
 facts — repo, license, entry point, checkpoint URL — don't trust memory.)
 
+**Start from the method card** `method-cards/<slug>.yaml` if present — the operator's
+`notes-for-agent` (intent/constraints), plus `links`, `tags`, `description`. Keep the card
+a **portable, shareable brief** (it goes on GitHub for others to reuse on their own
+Runpod); record your findings (paper/license status, runtime-download traps, unconditional
+imports, entrypoint quirks) in the **deploy doc `deploy-docs/<slug>_DEPLOY.md`**, not the card.
+See `method-cards/rhofold.yaml`.
+
 | Question | Example (RhoFold+) |
 |---|---|
 | `method_id` (dir name, lowercase) | `rhofold` |
@@ -80,7 +87,7 @@ hook needed (structRFM, RhoFold added none). Add one in
 
 ### A6. Run the server and click through (don't trust pytest alone)
 - Launch on the fake backend and exercise the real submit→status→results path:
-  `SCIABLE_BACKEND=fake SCIABLE_METHOD=<id> uvicorn app.main:app --port 8099`
+  `SCIABLE_BACKEND=fake uvicorn app.main:app --port 8099` (open `/methods/<id>`)
 - Submit the example (UI form or `curl -s -XPOST localhost:8099/api/runs -H 'content-type:
   application/json' -d '{"sequence":"..."}'`), open the run page, confirm the output
   renders and the Mockup banner shows. Catches manifest/serialization/UI issues pytest
@@ -94,7 +101,7 @@ hook needed (structRFM, RhoFold added none). Add one in
 
 ## Phase B — worker image + live BYOK run (GPU + weights)
 
-See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example.
+See `deploy-docs/RHOFOLD_DEPLOY.md` / `deploy-docs/STRUCTRFM_DEPLOY.md` for the worked example.
 
 > ⚠ **Phase B builds from GitHub, not your working tree.** Runpod's GitHub import
 > builds the image from the **pushed commit** — so **commit + push
@@ -152,7 +159,7 @@ See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example
   name `sciable-<id>` → 24 GB tier, all card types → **0 min / 1 max workers** →
   ignore the `runpod.serverless.start()` warning). Copy the **endpoint id**.
 - The app wants that **endpoint id** (not a URL): `SCIABLE_RUNPOD_ENDPOINT_IDS='{"<id>":"<endpoint-id>"}'`
-  (or `SCIABLE_METHOD=<id>` + `SCIABLE_RUNPOD_ENDPOINT_ID=<endpoint-id>`); it builds
+  (or the global `SCIABLE_RUNPOD_ENDPOINT_ID=<endpoint-id>`); it builds
   `https://api.runpod.ai/v2/<endpoint-id>/run` itself. **If the endpoint doesn't exist /
   the id is wrong → Runpod 404 → `BackendError` (API 502); if it points at another
   method's endpoint → `unknown_method`.**
@@ -166,7 +173,7 @@ See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example
 - Point the app at it and submit:
   ```bash
   export RUNPOD_API_KEY=<key>
-  SCIABLE_BACKEND=runpod SCIABLE_METHOD=<id> \
+  SCIABLE_BACKEND=runpod \
   SCIABLE_RUNPOD_ENDPOINT_ID=<endpoint-id> uvicorn app.main:app --port 8099
   ```
 - **The stub-vs-real tell:** real output has `raw.engine == "<id>"` (not `"stub"`), and

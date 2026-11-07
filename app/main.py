@@ -35,8 +35,6 @@ def build_backend(settings: Settings) -> Backend:
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     manifests = discover_manifests()
-    # The default method (used when a submission omits one) must exist.
-    default_method = settings.method if settings.method in manifests else next(iter(manifests))
     backend = build_backend(settings)
 
     @asynccontextmanager
@@ -48,7 +46,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Sciable", version=__version__, lifespan=lifespan)
     app.state.settings = settings
     app.state.manifests = manifests
-    app.state.default_method = default_method
     app.state.backend = backend
     app.state.run_service = RunService(settings, manifests, backend)
     app.include_router(web.router)

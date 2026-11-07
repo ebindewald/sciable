@@ -22,7 +22,7 @@ def _poll_to_terminal(client: TestClient, run_id: str, token: str | None = None)
 
 
 def test_submit_json_then_poll_success(client, example_pdb):
-    resp = client.post("/api/runs", json={"structure": example_pdb, "seed": 1})
+    resp = client.post("/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 1})
     assert resp.status_code == 201
     assert resp.headers["Location"].startswith("/api/runs/")
     run_id = resp.json()["id"]
@@ -39,7 +39,9 @@ def test_submit_json_then_poll_success(client, example_pdb):
 
 
 def test_raw_output_endpoint(client, example_pdb):
-    run_id = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}).json()["id"]
+    run_id = client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 1}
+    ).json()["id"]
     _poll_to_terminal(client, run_id)
     resp = client.get(f"/api/runs/{run_id}/raw")
     assert resp.status_code == 200
@@ -48,7 +50,9 @@ def test_raw_output_endpoint(client, example_pdb):
 
 
 def test_raw_output_404_before_success(client, example_pdb):
-    run_id = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}).json()["id"]
+    run_id = client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 1}
+    ).json()["id"]
     assert client.get(f"/api/runs/{run_id}/raw").status_code == 404
 
 
@@ -56,32 +60,36 @@ def test_submit_multipart(client, example_pdb):
     resp = client.post(
         "/api/runs",
         files={"structure_file": ("example.pdb", example_pdb, "text/plain")},
-        data={"design_count": "3", "seed": "2"},
+        data={"method": "grnade", "design_count": "3", "seed": "2"},
     )
     assert resp.status_code == 201
     assert resp.json()["inputs"]["design_count"] == 3
 
 
 def test_submit_use_example_flag(client):
-    resp = client.post("/api/runs", json={"use_example": True, "seed": 3})
+    resp = client.post("/api/runs", json={"method": "grnade", "use_example": True, "seed": 3})
     assert resp.status_code == 201
 
 
 def test_missing_structure_is_422(client):
-    resp = client.post("/api/runs", json={"seed": 1})
+    resp = client.post("/api/runs", json={"method": "grnade", "seed": 1})
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "empty_input"
 
 
 def test_validation_error_is_422(client, example_pdb):
-    resp = client.post("/api/runs", json={"structure": example_pdb, "design_count": 99})
+    resp = client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "design_count": 99}
+    )
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "design_count_out_of_range"
 
 
 def test_in_flight_conflict_is_409(client, example_pdb):
-    assert client.post("/api/runs", json={"structure": example_pdb, "seed": 1}).status_code == 201
-    resp = client.post("/api/runs", json={"structure": example_pdb, "seed": 2})
+    assert client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 1}
+    ).status_code == 201
+    resp = client.post("/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 2})
     assert resp.status_code == 409
     assert resp.json()["detail"]["code"] == "in_flight_limit"
 
@@ -90,8 +98,12 @@ def test_explicit_idempotency_key_returns_same_run(client, example_pdb):
     # Dedupe is opt-in per request via an explicit key (guards against double-
     # charging on retries); identical inputs without a key run fresh by default.
     hdr = {"Idempotency-Key": "k1"}
-    a = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}, headers=hdr).json()
-    b = client.post("/api/runs", json={"structure": example_pdb, "seed": 1}, headers=hdr).json()
+    a = client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 1}, headers=hdr
+    ).json()
+    b = client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 1}, headers=hdr
+    ).json()
     assert a["id"] == b["id"]
 
 
@@ -100,7 +112,7 @@ def test_unknown_run_is_404(client):
 
 
 def test_uncertain_submission_surfaced(client, example_pdb):
-    resp = client.post("/api/runs", json={"structure": example_pdb, "seed": -2})
+    resp = client.post("/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": -2})
     assert resp.status_code == 201
     assert resp.json()["submission_uncertain"] is True
 
@@ -116,13 +128,23 @@ def auth_client(tmp_path) -> Iterator[TestClient]:
 
 
 def test_api_requires_token_when_configured(auth_client, example_pdb):
-    assert auth_client.post("/api/runs", json={"structure": example_pdb}).status_code == 401
+    assert auth_client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb}
+    ).status_code == 401
 
 
 def test_api_accepts_valid_token(auth_client, example_pdb):
     resp = auth_client.post(
         "/api/runs",
-        json={"structure": example_pdb, "seed": 1},
+        json={"method": "grnade", "structure": example_pdb, "seed": 1},
         headers={"Authorization": "Bearer s3cret"},
     )
     assert resp.status_code == 201
+
+
+def test_submission_without_method_is_422(client, example_pdb):
+    """No default method exists: the landing page is the chooser, and an API
+    submission must name its method explicitly."""
+    resp = client.post("/api/runs", json={"structure": example_pdb, "seed": 1})
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "missing_method"

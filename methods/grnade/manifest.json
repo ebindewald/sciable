@@ -1,12 +1,12 @@
 {
   "method_id": "grnade",
   "version": "0.1.0-dev",
-  "title": "gRNAde — RNA sequence design for a target structure",
-  "description": "Design candidate RNA sequences for a target 3D structure (inverse folding). Outputs are candidates for the supplied backbone — a successful run does not validate folding or biological function.",
+  "title": "gRNAde \u2014 RNA sequence design for a target structure",
+  "description": "Design candidate RNA sequences for a target 3D structure (inverse folding). Outputs are candidates for the supplied backbone \u2014 a successful run does not validate folding or biological function.",
   "citation": "Joshi et al., gRNAde: Geometric Deep Learning for 3D RNA inverse design. https://github.com/chaitjo/geometric-rna-design",
-  "source_commit": "PENDING-M1-PIN",
-  "checkpoint_digest": "PENDING-M1-PIN",
-  "worker_image_digest": "PENDING-M4-BUILD",
+  "source_commit": "2453b18778a1981ac25f314790e5395f1e9ab218",
+  "checkpoint_digest": "PENDING-PIN",
+  "worker_image_digest": "PENDING-BUILD",
   "provisional": true,
   "runner": "run_grnade.py",
   "inputs": {
@@ -56,6 +56,6 @@
   },
   "example_ref": "methods/grnade/example/example.pdb",
   "example_summary": "A tiny synthetic 6-nucleotide RNA backbone (chain A), bundled so you can try the pipeline without hunting for a structure.",
-  "example_details": "This is a hand-made placeholder fixture, not a real biological molecule: six residues (A-U-G-C-A-U) on a single RNA chain with just enough atoms to exercise parsing, chain detection, and the end-to-end run. gRNAde's job is 'inverse folding' — given a 3D backbone shape, propose RNA sequences predicted to fold into it. For this example the backbone is synthetic, so the returned sequences are only meaningful as a demonstration of the workflow. Swap in a real PDB (one RNA chain) to design for an actual target, and note that until the real model is wired in, all sequences are deterministic placeholders rather than gRNAde predictions.",
-  "notes": "source_commit, checkpoint_digest, worker_image_digest, max_sequence_length and the structure max_bytes are provisional until confirmed by the M1 baseline and M4 smoke runs (see IMPLEMENTATION_PLAN.md)."
+  "example_details": "This is a hand-made placeholder fixture, not a real biological molecule: six residues (A-U-G-C-A-U) on a single RNA chain with just enough atoms to exercise parsing, chain detection, and the end-to-end run. gRNAde's job is 'inverse folding' \u2014 given a 3D backbone shape, propose RNA sequences predicted to fold into it. For this example the backbone is synthetic, so the returned sequences are only meaningful as a demonstration of the workflow. Swap in a real PDB (one RNA chain) to design for an actual target. On the fake backend (no GPU) all sequences are deterministic placeholders; real gRNAde designs come from the Runpod endpoint whose image bakes the checkpoint (see deploy-docs/GRNADE_DEPLOY.md).",
+  "notes": "Real runner landed (worker/run_grnade.py: checkpoint-gated real path via upstream's programmatic API; raises on failure, fails loudly without the checkpoint). source_commit is verified from GitHub (gRNAde v1.0 release 2025-12-15) but build-unverified; checkpoint_digest, worker_image_digest, max_sequence_length and structure max_bytes stay provisional until a real Runpod smoke run. Code license MIT; the one gRNAde checkpoint (chaitjo/gRNAde on HF) is MIT, but the HF repo also bundles rhofold/ribonanzanet weights under their own LICENSE files \u2014 verify those before redistributing an image. Adapter exposes raw sampled designs (temperature 0.1) and deliberately omits upstream's RibonanzaNet scoring/filtering loop; upstream-parity is checked against gRNAde.sample, not design.py's filtered CSV."
 }

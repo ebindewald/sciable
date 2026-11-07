@@ -21,7 +21,9 @@ HTML = {"Accept": "text/html"}
 
 
 def _submit(client, example_pdb, seed):
-    resp = client.post("/api/runs", json={"structure": example_pdb, "seed": seed})
+    resp = client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": seed}
+    )
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -48,7 +50,9 @@ def test_cancel_queued_run_frees_slot(client, example_pdb):
 
     # Stays canceled on re-poll, and a new submission is no longer blocked.
     assert client.get(f"/api/runs/{run['id']}").json()["state"] == "canceled"
-    assert client.post("/api/runs", json={"structure": example_pdb, "seed": 2}).status_code == 201
+    assert client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 2}
+    ).status_code == 201
 
 
 def test_cancel_running_run(client, example_pdb):
@@ -68,7 +72,9 @@ def test_cancel_uncertain_run_has_no_provider_call(client, example_pdb):
     assert body["state"] == "canceled"
     assert body["provider_cancel"] == "not_applicable"
     assert body["submission_uncertain"] is False
-    assert client.post("/api/runs", json={"structure": example_pdb, "seed": 2}).status_code == 201
+    assert client.post(
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 2}
+    ).status_code == 201
 
 
 def test_cancel_terminal_run_is_409(client, example_pdb):
@@ -96,7 +102,7 @@ def auth_client(tmp_path) -> Iterator[TestClient]:
 def test_cancel_requires_operator(auth_client, example_pdb):
     auth = {"Authorization": "Bearer s3cret"}
     run_id = auth_client.post(
-        "/api/runs", json={"structure": example_pdb, "seed": 1}, headers=auth
+        "/api/runs", json={"method": "grnade", "structure": example_pdb, "seed": 1}, headers=auth
     ).json()["id"]
     assert auth_client.post(f"/api/runs/{run_id}/cancel").status_code == 401
     resp = auth_client.post(f"/api/runs/{run_id}/cancel", headers=auth)
