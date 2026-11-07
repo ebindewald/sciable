@@ -24,9 +24,10 @@ def test_method_page_renders(client):
     assert "gRNAde" in resp.text
     assert "Submit run" in resp.text
     assert 'name="method" value="grnade"' in resp.text  # hidden method field
-    # gRNAde now has a real (checkpoint-gated) runner → provisional, not MOCKUP.
-    assert "provisional (pre-baseline)" in resp.text
+    # gRNAde is a real, validated method now (real inference proven on its endpoint),
+    # so neither the MOCKUP badge nor the provisional note should appear.
     assert "MOCKUP" not in resp.text
+    assert "provisional (pre-baseline)" not in resp.text
 
 
 def test_unknown_method_page_404(client):
@@ -134,13 +135,14 @@ def test_run_page_404(client):
     assert client.get("/runs/nope").status_code == 404
 
 
-def test_provisional_method_is_flagged(client):
-    """gRNAde now has a real checkpoint-gated runner, so it is 'provisional'
-    (real-but-unvalidated) rather than MOCKUP: the UI must show the provisional
-    wording and never the MOCKUP badge, and a demo-backend (stub) result must
-    still carry the 'Mockup output' placeholder warning."""
-    assert "provisional (pre-baseline)" in client.get("/").text         # landing card
-    assert "provisional (pre-baseline)" in client.get("/methods/grnade").text
+def test_real_method_fake_backend_still_flags_stub_output(client):
+    """gRNAde is a real, non-provisional method now (real inference proven on its
+    endpoint), so its pages carry neither the MOCKUP badge nor the provisional note.
+    But the fake backend runs the STUB, so a fake-backend result must STILL honestly
+    flag its output as a placeholder (via the engine=="stub" branch), never present a
+    placeholder as a real design."""
+    assert "MOCKUP" not in client.get("/").text                         # landing card
+    assert "provisional (pre-baseline)" not in client.get("/methods/grnade").text
     assert "MOCKUP" not in client.get("/methods/grnade").text
     run = client.post(
         "/api/runs", json={"method": "grnade", "use_example": True}
@@ -151,7 +153,7 @@ def test_provisional_method_is_flagged(client):
         if client.get(f"/api/runs/{run['id']}").json()["state"] == "succeeded":
             page = client.get(f"/runs/{run['id']}").text
             break
-    # Fake backend runs the stub, so the result is a flagged placeholder, not real design.
+    # Fake backend runs the stub (engine="stub"), so the result is a flagged placeholder.
     assert "Mockup output" in page
 
 

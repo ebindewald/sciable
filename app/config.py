@@ -1,7 +1,10 @@
 """Application settings.
 
-The backend selector decides whether runs go to the deterministic FakeBackend
-(default, for local/CI — no GPU, no credentials) or the live RunpodBackend.
+The backend selector decides whether runs go to the live RunpodBackend (default)
+or the deterministic FakeBackend. The fake backend is **opt-in**
+(``SCIABLE_BACKEND=fake``) and returns STUB output for GPU-free local/CI testing —
+it is deliberately NOT the default, so a missing/forgotten setting fails loudly on
+the real backend instead of silently returning stub results that look real.
 
 Secrets are never stored here as values. ``runpod_api_key_env`` names the
 environment variable the RunpodBackend reads at submit time; the key itself
@@ -24,8 +27,10 @@ class Settings(BaseSettings):
     # Storage
     db_path: Path = REPO_ROOT / "sciable.db"
 
-    # Backend: "fake" (default) or "runpod"
-    backend: str = "fake"
+    # Backend: "runpod" (default, real inference) or "fake" (opt-in, STUB output for
+    # GPU-free local/CI). Fake is NOT the default on purpose — a forgotten setting
+    # must fail loudly on runpod, never silently serve stub output (see main.build_backend).
+    backend: str = "runpod"
 
     # There is deliberately NO "active/default method" setting: the landing page
     # lists every method in the registry, the user picks a form, and every

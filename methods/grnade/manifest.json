@@ -7,7 +7,7 @@
   "source_commit": "2453b18778a1981ac25f314790e5395f1e9ab218",
   "checkpoint_digest": "sha256:d43454deaeec773644bfa52385b6fcc8264db256878fd9ca19ed8711ec62971c",
   "worker_image_digest": "registry.runpod.net/ebindewald-sciable-main-worker-dockerfile-grnade_...:f910424d6",
-  "provisional": true,
+  "provisional": false,
   "runner": "run_grnade.py",
   "inputs": {
     "fields": [

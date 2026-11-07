@@ -56,6 +56,10 @@
     <p class="muted"><strong>Real structRFM output.</strong> A learned representation that
        correlates with base pairing (including crossing/pseudoknot signal) — not a
        calibrated secondary-structure prediction.</p>
+    {% elif engine == "grnade" %}
+    <p class="muted"><strong>Real gRNAde designs.</strong> Candidate sequences for the
+       supplied backbone — a successful run does not validate folding or biological
+       function.</p>
     {% elif engine == "stub" or manifest.provisional %}
     <p class="warn"><strong>⚠ Mockup output:</strong> a deterministic placeholder (demo
        backend), not a real {{ manifest.method_id }} result — it depends only on input size.</p>

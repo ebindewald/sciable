@@ -19,10 +19,10 @@ pip install -e ".[dev]"          # install app + dev tools (ruff, pytest)
 ruff check .                     # lint (must pass; CI gate)
 pytest                           # full suite — no GPU, no credentials
 pytest tests/test_runs_lifecycle.py::test_happy_path_succeeds_and_writes_fasta  # single test
-uvicorn app.main:app --reload --port 8099   # run the app on the fake backend
+SCIABLE_BACKEND=fake uvicorn app.main:app --reload --port 8099   # GPU-free (STUB output)
 ```
 
-Settings use the `SCIABLE_` env prefix (`app/config.py`); `SCIABLE_BACKEND=fake` is the default. The Runpod key is referenced by env-var **name** (`SCIABLE_RUNPOD_API_KEY_ENV`), never stored.
+Settings use the `SCIABLE_` env prefix (`app/config.py`); the default backend is **`runpod`** (real inference), and the GPU-free **`fake`** backend is **opt-in** via `SCIABLE_BACKEND=fake` — it returns STUB output and logs a loud banner, so a forgotten setting fails on the real backend instead of silently serving stubs. For local tests use `SCIABLE_BACKEND=fake`. The Runpod key is referenced by env-var **name** (`SCIABLE_RUNPOD_API_KEY_ENV`), never stored.
 
 ## What this is
 

@@ -24,6 +24,20 @@ load_dotenv(REPO_ROOT / ".env", override=False)
 
 def build_backend(settings: Settings) -> Backend:
     if settings.backend == "fake":
+        # LOUD on purpose: the fake backend returns deterministic STUB output, not
+        # real inference. Mistaking it for real has cost real debugging time, so make
+        # it impossible to miss which backend is live (set SCIABLE_BACKEND=runpod for
+        # real runs).
+        import sys
+
+        banner = (
+            "=" * 72 + "\n"
+            "  ⚠  SCIABLE_BACKEND=fake — ALL run output is STUB/placeholder, NOT real\n"
+            "     inference. Set SCIABLE_BACKEND=runpod (and the endpoint ids) for real\n"
+            "     results. This backend exists only for GPU-free local/CI testing.\n"
+            + "=" * 72
+        )
+        print(banner, file=sys.stderr, flush=True)
         return FakeBackend()
     if settings.backend == "runpod":
         from app.backends.runpod import RunpodBackend

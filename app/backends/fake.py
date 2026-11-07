@@ -194,7 +194,10 @@ class FakeBackend:
             ]
         )
         base_raw["report"] = {"stub": True, "alphabet": "ACGU"}
-        return {"sequences": sequences}, base_raw
+        # Mark the output engine="stub" so the results page flags it as a placeholder
+        # even for methods that are no longer `provisional` (e.g. grnade once its real
+        # endpoint is live). The run page keys the "Mockup output" banner off engine.
+        return {"sequences": sequences, "engine": "stub"}, base_raw
 
     def cancel(self, provider_job_id: str, endpoint_ref: str = "fake-endpoint") -> bool:
         job = self._jobs.get(provider_job_id)
