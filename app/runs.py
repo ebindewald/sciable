@@ -249,6 +249,10 @@ class RunService:
             outputs_ref = self._write_outputs(run_id, status.outputs)
             if status.raw:
                 self._write_raw(run_id, status.raw)
+        elif status.state is RunState.FAILED and status.raw:
+            # Keep the worker's failure detail (the runner's stderr tail) so the run
+            # is debuggable in-app, not only in the provider's live logs.
+            self._write_raw(run_id, status.raw)
 
         finished_at = _now() if status.state in TERMINAL_STATES else None
         with get_conn(self.settings.db_path) as conn:
@@ -307,3 +311,16 @@ class RunService:
 
     def raw_output_path(self, run_id: str) -> Path:
         return self._outputs_dir / f"{run_id}.raw.json"
+
+    def read_raw(self, run_id: str) -> dict | None:
+        """The worker's raw output/detail for a run, from the canonical path.
+
+        Works for failed runs too (which have no ``outputs_ref`` to derive a dir
+        from), so the failure detail is retrievable, not only the success case."""
+        path = self.raw_output_path(run_id)
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None

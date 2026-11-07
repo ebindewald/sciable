@@ -47,6 +47,19 @@ def test_failure_path(run_service, example_pdb):
     assert run.error_category == "worker_error"
 
 
+def test_failure_detail_is_persisted_and_readable(run_service, example_pdb):
+    """A failed run keeps the worker's detail (stderr tail), retrievable despite
+    having no outputs_ref — so failures are debuggable in-app, not only in logs."""
+    service, deployment_id = run_service
+    run = _submit(service, deployment_id, example_pdb, -1)
+    run = _drive(service, run)
+    assert run.state == RunState.FAILED
+    assert run.outputs_ref is None  # no outputs for a failed run
+    raw = service.read_raw(run.id)
+    assert raw is not None
+    assert "simulated failure" in raw["detail"]
+
+
 def test_uncertain_submission_not_resubmitted(run_service, example_pdb):
     service, deployment_id = run_service
     run = _submit(service, deployment_id, example_pdb, -2)

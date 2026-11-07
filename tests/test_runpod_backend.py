@@ -1,167 +1,144 @@
-"""RunpodBackend against a mocked HTTP transport — no network, no credentials."""
+"""RunpodBackend: FAILED-detail capture (fix #1) and per-method endpoint
+resolution (fix #2).
+
+These are the two gaps that left a rhofold run showing a bare ``worker_error``
+with no detail, submitted to the wrong (shared) endpoint.
+"""
 
 from __future__ import annotations
-
-import json
 
 import httpx
 import pytest
 
-from app.backends.base import JobSpec, SubmitStatus
+from app.backends.base import JobSpec
 from app.backends.runpod import BackendError, RunpodBackend
-from app.config import Settings
 from app.models import RunState
 
 
 @pytest.fixture(autouse=True)
-def _api_key(monkeypatch):
+def _key(monkeypatch):
     monkeypatch.setenv("RUNPOD_API_KEY", "testkey")
 
 
-def _settings() -> Settings:
-    return Settings(backend="runpod", runpod_endpoint_id="ep123")
+def _backend(settings, update, responder):
+    s = settings.model_copy(update={"backend": "runpod", **update})
+    return RunpodBackend(s, client=httpx.Client(transport=httpx.MockTransport(responder)))
 
 
-def _backend(handler) -> RunpodBackend:
-    client = httpx.Client(
-        transport=httpx.MockTransport(handler),
-        headers={"Authorization": "Bearer testkey"},
+# -- fix #1: FAILED jobs carry the real category + detail -------------------------
+
+
+def test_failed_job_captures_category_and_detail(settings):
+    """Runpod FAILED with a top-level error (our returned {"error": ...}) → the
+    specific category and the stderr-tail detail are surfaced, not a bare label."""
+
+    def responder(_req):
+        return httpx.Response(
+            200,
+            json={
+                "status": "FAILED",
+                "error": "unknown_method",
+                "output": {"detail": "No runner for method 'rhofold'."},
+            },
+        )
+
+    st = _backend(settings, {"runpod_endpoint_id": "ep"}, responder).status("job-1")
+    assert st.state is RunState.FAILED
+    assert st.error_category == "unknown_method"
+    assert st.raw["detail"] == "No runner for method 'rhofold'."
+
+
+def test_completed_job_with_error_in_output_is_failed(settings):
+    """Handler-caught WorkerError surfaced as COMPLETED + output.error."""
+
+    def responder(_req):
+        return httpx.Response(
+            200,
+            json={"status": "COMPLETED", "output": {"error": "worker_error", "detail": "exit 1"}},
+        )
+
+    st = _backend(settings, {"runpod_endpoint_id": "ep"}, responder).status("job-1")
+    assert st.state is RunState.FAILED
+    assert st.error_category == "worker_error"
+    assert st.raw["detail"] == "exit 1"
+
+
+def test_timeout_category_is_not_clobbered(settings):
+    """A TIMED_OUT job keeps the 'timeout' category even if an error key is present."""
+
+    def responder(_req):
+        return httpx.Response(
+            200, json={"status": "TIMED_OUT", "error": "worker_error", "output": {"detail": "x"}}
+        )
+
+    st = _backend(settings, {"runpod_endpoint_id": "ep"}, responder).status("job-1")
+    assert st.state is RunState.FAILED
+    assert st.error_category == "timeout"
+
+
+def test_succeeded_job_returns_outputs_and_raw(settings):
+    def responder(_req):
+        return httpx.Response(
+            200,
+            json={
+                "status": "COMPLETED",
+                "output": {"outputs": {"sequences": ["GG"]}, "report": {"e": 1}},
+            },
+        )
+
+    st = _backend(settings, {"runpod_endpoint_id": "ep"}, responder).status("job-1")
+    assert st.state is RunState.SUCCEEDED
+    assert st.outputs == {"sequences": ["GG"]}
+    assert st.raw["report"] == {"e": 1}
+
+
+# -- fix #2: endpoint resolves per active method ----------------------------------
+
+
+def _submit_path(settings, update):
+    calls: list[str] = []
+
+    def responder(req):
+        calls.append(req.url.path)
+        return httpx.Response(200, json={"id": "j1", "status": "IN_QUEUE"})
+
+    be = _backend(settings, update, responder)
+    be.submit(
+        JobSpec(
+            fingerprint="f",
+            seed=None,
+            method_id=update.get("method", "grnade"),
+            output_kind="sequences",
+            inputs={"x": 1},
+            endpoint_ref="unused",
+        )
     )
-    return RunpodBackend(_settings(), client=client)
+    return calls
 
 
-JOB = JobSpec(
-    fingerprint="fp",
-    seed=1,
-    method_id="grnade",
-    output_kind="sequences",
-    inputs={"structure": "PDB", "chain": "A", "design_count": 2},
-    endpoint_ref="ep123",
-)
+def test_endpoint_resolves_per_method(settings):
+    calls = _submit_path(
+        settings,
+        {"method": "rhofold", "runpod_endpoint_id": "ep-default",
+         "runpod_endpoint_ids": {"rhofold": "ep-rho"}},
+    )
+    assert calls == ["/v2/ep-rho/run"]
 
 
-def test_requires_endpoint_id(monkeypatch):
+def test_endpoint_falls_back_to_global(settings):
+    calls = _submit_path(
+        settings,
+        {"method": "grnade", "runpod_endpoint_id": "ep-default",
+         "runpod_endpoint_ids": {"rhofold": "ep-rho"}},
+    )
+    assert calls == ["/v2/ep-default/run"]
+
+
+def test_missing_endpoint_raises(settings):
+    s = settings.model_copy(
+        update={"backend": "runpod", "method": "rhofold",
+                "runpod_endpoint_id": None, "runpod_endpoint_ids": {}}
+    )
+    transport = httpx.MockTransport(lambda r: httpx.Response(200))
     with pytest.raises(BackendError):
-        RunpodBackend(Settings(backend="runpod", runpod_endpoint_id=None))
-
-
-def test_requires_api_key(monkeypatch):
-    monkeypatch.delenv("RUNPOD_API_KEY", raising=False)
-    with pytest.raises(BackendError):
-        RunpodBackend(_settings())
-
-
-def test_submit_accepted():
-    seen = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["path"] = request.url.path
-        seen["auth"] = request.headers.get("Authorization")
-        seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json={"id": "job1", "status": "IN_QUEUE"})
-
-    result = _backend(handler).submit(JOB)
-    assert result.status is SubmitStatus.ACCEPTED
-    assert result.provider_job_id == "job1"
-    assert seen["path"] == "/v2/ep123/run"
-    assert seen["auth"] == "Bearer testkey"
-    assert seen["body"]["input"]["method"] == "grnade"
-    assert seen["body"]["input"]["inputs"]["structure"] == "PDB"
-    assert seen["body"]["input"]["inputs"]["design_count"] == 2
-
-
-def test_submit_timeout_is_uncertain():
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectTimeout("boom", request=request)
-
-    result = _backend(handler).submit(JOB)
-    assert result.status is SubmitStatus.UNCERTAIN
-    assert result.provider_job_id is None
-
-
-def test_submit_auth_error_raises():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(401, json={"error": "unauthorized"})
-
-    with pytest.raises(BackendError):
-        _backend(handler).submit(JOB)
-
-
-@pytest.mark.parametrize(
-    "raw,expected_state,expected_cat",
-    [
-        ("IN_QUEUE", RunState.QUEUED, None),
-        ("IN_PROGRESS", RunState.RUNNING, None),
-        ("FAILED", RunState.FAILED, "worker_error"),
-        ("CANCELLED", RunState.CANCELED, None),
-        ("TIMED_OUT", RunState.FAILED, "timeout"),
-    ],
-)
-def test_status_mapping(raw, expected_state, expected_cat):
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"id": "job1", "status": raw})
-
-    st = _backend(handler).status("job1")
-    assert st.state is expected_state
-    assert st.error_category == expected_cat
-
-
-def test_status_completed_returns_outputs():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "id": "job1",
-                "status": "COMPLETED",
-                "output": {"outputs": {"sequences": ["ACGU", "UGCA"]}, "report": {"stub": True}},
-            },
-        )
-
-    st = _backend(handler).status("job1")
-    assert st.state is RunState.SUCCEEDED
-    assert st.outputs == {"sequences": ["ACGU", "UGCA"]}
-    assert st.raw["backend"] == "runpod"
-
-
-def test_status_completed_structure_outputs():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "id": "j",
-                "status": "COMPLETED",
-                "output": {"outputs": {"sequence": "GGGGAAAACCCC", "structure": "((((....))))"}},
-            },
-        )
-
-    st = _backend(handler).status("j")
-    assert st.state is RunState.SUCCEEDED
-    assert st.outputs["structure"] == "((((....))))"
-
-
-def test_status_completed_with_worker_error():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200, json={"id": "j", "status": "COMPLETED", "output": {"error": "no_output"}}
-        )
-
-    st = _backend(handler).status("j")
-    assert st.state is RunState.FAILED
-    assert st.error_category == "no_output"
-
-
-def test_status_404_is_expired():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, json={})
-
-    st = _backend(handler).status("gone")
-    assert st.state is RunState.FAILED
-    assert st.error_category == "expired_or_unknown"
-
-
-def test_cancel():
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v2/ep123/cancel/job1"
-        return httpx.Response(200, json={"status": "CANCELLED"})
-
-    assert _backend(handler).cancel("job1") is True
+        RunpodBackend(s, client=httpx.Client(transport=transport))

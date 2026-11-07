@@ -1,0 +1,36 @@
+# RhoFold+ Runpod Serverless worker dependencies.
+#
+# Upstream (Apache-2.0): https://github.com/ml4bio/RhoFold — installed from a
+# pinned commit in worker/Dockerfile.rhofold (it is not a clean PyPI package; the
+# runner invokes its inference.py directly).
+#
+# Upstream pins python 3.7 + torch 1.10.2 / CUDA 11.3 (environment_linux.yaml),
+# which has NO kernels for GPUs newer than Ampere (sm_86) — the same trap that made
+# the structRFM job hang on Blackwell MIG slices. So we DO NOT use upstream's torch:
+# the image is built on pytorch/pytorch:2.7.1-cuda12.8-cudnn9 and torch is NOT
+# pinned here (pinning would let pip pull a build without newer-GPU kernels).
+#
+# ⚠ FIRST-BUILD RISK: RhoFold is older than structRFM's plain-BERT modules, so torch
+# 2.7 API-compatibility is NOT yet confirmed — verify on the first smoke run and pin
+# anything that drifts. These versions are py3.11-compatible modern picks, NOT
+# upstream's py3.7 pins (numpy==1.21.2 etc. won't build on the 2.7 base).
+runpod>=1.6
+biopython
+ml-collections
+dm-tree
+einops
+numpy
+scipy
+transformers
+tokenizers
+# Used at build time to bake the full checkpoint repo, and by upstream inference.py
+# at runtime (it calls snapshot_download unconditionally — we run it HF_HUB_OFFLINE=1).
+huggingface_hub
+
+# Amber relaxation (inference.py --relax_steps > 0) needs OpenMM + pdbfixer. The
+# image defaults to RELAX_STEPS=0 (reads unrelaxed_model.pdb) to avoid these heavy
+# deps. IF the unrelaxed PDB has no per-residue pLDDT in its B-factor column (the
+# runner fails loud: "no parseable pLDDT"), enable relax: set RHOFOLD_RELAX_STEPS=1000
+# and uncomment the two lines below, then rebuild.
+# openmm
+# pdbfixer @ git+https://github.com/openmm/pdbfixer.git

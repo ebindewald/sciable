@@ -91,6 +91,27 @@ def test_structrfm_runner_produces_matrix(tmp_path):
     assert result.runner_report["engine"] == "stub"  # no checkpoint in CI
 
 
+def test_rhofold_runner_produces_pdb(tmp_path):
+    seq = "GGCACUUCGGUGCC"
+    result = run_job(
+        {"method": "rhofold", "inputs": {"sequence": seq}},
+        base_dir=tmp_path,
+        cleanup=False,
+    )
+    out = result.outputs
+    assert out["sequence"] == seq
+    assert out["engine"] == "stub"  # no checkpoint in CI
+    assert out["pdb"].startswith("ATOM") and "END" in out["pdb"]
+    assert out["pdb"].count("ATOM") == len(seq)  # one P atom per nucleotide
+    # per-residue pLDDT parsed back from the B-factor column matches the output list
+    from worker.run_rhofold import _plddt_from_pdb
+
+    assert _plddt_from_pdb(out["pdb"]) == out["plddt"]
+    assert len(out["plddt"]) == len(seq)
+    assert all(40.0 <= v <= 95.0 for v in out["plddt"])
+    assert result.runner_report["residues"] == len(seq)
+
+
 def test_handler_entrypoint_shape(tmp_path, example_pdb, monkeypatch):
     monkeypatch.setenv("WORKER_WORK_ROOT", str(tmp_path / "jobs"))
     from worker.handler import handler

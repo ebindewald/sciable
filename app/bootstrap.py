@@ -68,7 +68,7 @@ def ensure_seeded(settings: Settings, manifest: Manifest) -> str:
             (
                 deployment_id,
                 release.id,
-                _endpoint_ref(settings),
+                _endpoint_ref(settings, manifest),
                 json.dumps(exec_limits),
                 settings.runpod_api_key_env,
                 _now(),
@@ -82,9 +82,9 @@ def ensure_all_seeded(settings: Settings, manifests: dict[str, Manifest]) -> dic
     return {mid: ensure_seeded(settings, m) for mid, m in manifests.items()}
 
 
-def _endpoint_ref(settings: Settings) -> str:
+def _endpoint_ref(settings: Settings, manifest: Manifest) -> str:
     if settings.backend == "fake":
         return "fake-endpoint"
     if settings.backend == "runpod":
-        return settings.runpod_endpoint_id or "PENDING-ENDPOINT-ID"
+        return settings.runpod_endpoint_for(manifest.method_id) or "PENDING-ENDPOINT-ID"
     return "unknown"

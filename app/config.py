@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # The operator's Serverless endpoint id (from the Runpod console). Required
     # when backend == "runpod".
     runpod_endpoint_id: str | None = None
+    # Optional per-method endpoint override: {method_id: endpoint_id}. The active
+    # method resolves to runpod_endpoint_ids[method] if present, else
+    # runpod_endpoint_id. Lets one operator run several methods, each on its own
+    # endpoint/image, so the single global id can't silently route a method to the
+    # wrong worker image (which fails with "unknown_method").
+    runpod_endpoint_ids: dict[str, str] = {}
     # Per-call HTTP timeout for Runpod submit/status/cancel.
     runpod_http_timeout_s: float = 30.0
 
@@ -60,6 +66,10 @@ class Settings(BaseSettings):
     # Idempotency-Key is honored regardless of this flag, so retries still cannot
     # double-charge a GPU job.
     dedupe_identical_inputs: bool = False
+
+    def runpod_endpoint_for(self, method_id: str) -> str | None:
+        """Endpoint id for a method: its per-method override, else the global id."""
+        return self.runpod_endpoint_ids.get(method_id) or self.runpod_endpoint_id
 
 
 @lru_cache

@@ -158,6 +158,42 @@ def render_structure_svg(sequence: str, structure: str) -> str:
     )
 
 
+def plddt_from_pdb(pdb_text: str) -> list[float]:
+    """Per-residue pLDDT from a PDB's B-factor column, in file order.
+
+    RhoFold writes the per-residue pLDDT into the B-factor (cols 61-66) of every
+    atom in a residue, so we read the first atom seen per (chain, resSeq). Lines
+    too short or with an unparseable B-factor are skipped rather than raising, so
+    a malformed structure still yields what it can."""
+    seen: set[tuple[str, str]] = set()
+    plddt: list[float] = []
+    for line in pdb_text.splitlines():
+        if not line.startswith(("ATOM", "HETATM")) or len(line) < 66:
+            continue
+        key = (line[21:22], line[22:26])
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            plddt.append(round(float(line[60:66]), 2))
+        except ValueError:
+            continue
+    return plddt
+
+
+def structure_3d_metrics(pdb_text: str) -> dict:
+    """Summary of a predicted 3D structure (residue/atom counts, pLDDT range)."""
+    plddt = plddt_from_pdb(pdb_text)
+    atoms = sum(1 for ln in pdb_text.splitlines() if ln.startswith(("ATOM", "HETATM")))
+    return {
+        "length": len(plddt),
+        "atoms": atoms,
+        "plddt_mean": round(sum(plddt) / len(plddt), 2) if plddt else 0.0,
+        "plddt_min": min(plddt) if plddt else 0.0,
+        "plddt_max": max(plddt) if plddt else 0.0,
+    }
+
+
 #: Above this length we don't render an inline heatmap (too many SVG cells).
 _HEATMAP_MAX_L = 120
 
@@ -254,6 +290,12 @@ def serialize_run(run: Run, manifest: Manifest) -> dict:
             body["sequence"] = outputs.get("sequence")
             if outputs.get("structure"):
                 body["metrics"] = structure_metrics(outputs["structure"])
+        elif kind == "structure_3d":
+            body["pdb"] = outputs.get("pdb")
+            body["sequence"] = outputs.get("sequence")
+            body["plddt"] = outputs.get("plddt")
+            if outputs.get("pdb"):
+                body["metrics"] = structure_3d_metrics(outputs["pdb"])
         else:
             sequences = outputs.get("sequences", [])
             body["sequences"] = sequences
@@ -411,7 +453,12 @@ def get_run(run_id: str, request: Request):
     run = service.poll_run(run_id)  # reconcile with backend on read
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found.")
-    return serialize_run(run, manifest_for_run(request, run))
+    body = serialize_run(run, manifest_for_run(request, run))
+    if run.state == RunState.FAILED:
+        raw = service.read_raw(run_id)
+        if raw and raw.get("detail"):
+            body["error_detail"] = raw["detail"]
+    return body
 
 
 @router.post("/runs/{run_id}/cancel", dependencies=[Depends(require_operator)])
@@ -445,15 +492,26 @@ def cancel_run(run_id: str, request: Request):
 
 
 @router.get("/runs/{run_id}/raw", dependencies=[Depends(require_operator)])
-def get_run_raw(run_id: str, request: Request):
-    """The worker's raw program output for a finished run."""
+def get_run_raw(run_id: str, request: Request, download: bool = False):
+    """The worker's raw program output (or failure detail) for a finished run.
+
+    ``?download=1`` serves it as a JSON file attachment; otherwise it is returned
+    inline for in-browser / API viewing."""
     service: RunService = request.app.state.run_service
     run = service.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found.")
-    raw = read_raw_output(run)
+    raw = service.read_raw(run_id)  # works for failed runs too (no outputs_ref)
     if raw is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No raw output for this run."
+        )
+    if download:
+        return Response(
+            content=json.dumps(raw, indent=2, sort_keys=True),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="run-{run_id[:8]}-raw.json"'
+            },
         )
     return raw

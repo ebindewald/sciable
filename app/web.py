@@ -24,6 +24,7 @@ from app.api import (
     render_structure_svg,
     resolve_method,
     sequence_metrics,
+    structure_3d_metrics,
     structure_metrics,
 )
 from app.models import TERMINAL_STATES, RunState
@@ -104,9 +105,10 @@ def run_page(run_id: str, request: Request):
 
     uncertain = run.state == RunState.QUEUED and run.error_category == UNCERTAIN_SUBMISSION
     succeeded = run.state == RunState.SUCCEEDED
+    failed = run.state == RunState.FAILED
     kind = manifest.outputs.kind
     outputs = read_outputs(run.outputs_ref) if succeeded else {}
-    raw = read_raw_output(run) if succeeded else None
+    raw = read_raw_output(run) if succeeded else (service.read_raw(run.id) if failed else None)
 
     ctx = {
         "run": run,
@@ -117,6 +119,7 @@ def run_page(run_id: str, request: Request):
         "uncertain": uncertain,
         "raw_json": json.dumps(raw, indent=2, sort_keys=True) if raw else None,
         "raw_stdout": (raw or {}).get("stdout"),
+        "error_detail": (raw or {}).get("detail") if failed else None,
     }
     if succeeded and kind == "contact_map":
         sequence = outputs.get("sequence") or ""
@@ -133,6 +136,11 @@ def run_page(run_id: str, request: Request):
         ctx["sequence"] = sequence
         ctx["struct_metrics"] = structure_metrics(structure) if structure else None
         ctx["structure_svg"] = render_structure_svg(sequence, structure) if structure else ""
+    elif succeeded and kind == "structure_3d":
+        pdb = outputs.get("pdb") or ""
+        ctx["pdb"] = pdb
+        ctx["sequence"] = outputs.get("sequence") or ""
+        ctx["struct3d_metrics"] = structure_3d_metrics(pdb) if pdb else None
     elif succeeded:
         sequences = outputs.get("sequences", [])
         ctx["sequences"] = sequences

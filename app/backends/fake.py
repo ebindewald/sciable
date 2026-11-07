@@ -55,6 +55,27 @@ def _contact_matrix(sequence: str) -> list[list[float]]:
     return mat
 
 
+def _pdb(sequence: str) -> tuple[str, list[float]]:
+    """Deterministic placeholder PDB — one P atom per nucleotide along a straight
+    line, with an input-derived per-residue pLDDT (40-95) in the B-factor column.
+    Not a real structure; just a well-formed, parseable PDB of the right length.
+    Returns the PDB text and the per-residue pLDDT list."""
+    seq = sequence or ""
+    lines: list[str] = []
+    plddt: list[float] = []
+    for i, base in enumerate(seq, start=1):
+        h = hashlib.sha256(f"{seq}:{i}".encode()).digest()
+        x = i * 5.9  # ~P-P backbone spacing
+        conf = round(40 + (h[0] / 255) * 55, 2)  # 40.00 - 95.00
+        plddt.append(conf)
+        lines.append(
+            f"ATOM  {i:>5} {'P':^4}{' '}{base:>3} {'A'}{i:>4}{' '}   "
+            f"{x:>8.3f}{0.0:>8.3f}{0.0:>8.3f}{1.0:>6.2f}{conf:>6.2f}          {'P':>2}"
+        )
+    lines += ["TER", "END"]
+    return "\n".join(lines) + "\n", plddt
+
+
 class FakeBackend:
     def __init__(self) -> None:
         self._jobs: dict[str, dict] = {}
@@ -98,7 +119,11 @@ class FakeBackend:
         if polls < 2:
             return JobStatus(state=RunState.RUNNING)
         if scenario == "fail":
-            return JobStatus(state=RunState.FAILED, error_category="worker_error")
+            return JobStatus(
+                state=RunState.FAILED,
+                error_category="worker_error",
+                raw={"backend": "fake", "detail": "Runner exited non-zero (simulated failure)."},
+            )
 
         outputs, raw = self._produce(job, provider_job_id)
         return JobStatus(state=RunState.SUCCEEDED, outputs=outputs, raw=raw)
@@ -127,6 +152,21 @@ class FakeBackend:
                 {"sequence": sequence, "matrix": matrix, "matrix_type": "attention"},
                 base_raw,
             )
+
+        if kind == "structure_3d":
+            sequence = str(inputs.get("sequence") or "")
+            pdb, plddt = _pdb(sequence)
+            base_raw["job"]["length"] = len(sequence)
+            base_raw["stdout"] = "\n".join(
+                [
+                    "[stub-runner] loading sequence... ok",
+                    f"[stub-runner] predicting 3D structure for {len(sequence)} nt "
+                    "(single-sequence mode)...",
+                    "[stub-runner] done.",
+                ]
+            )
+            base_raw["report"] = {"stub": True, "format": "pdb"}
+            return {"sequence": sequence, "pdb": pdb, "plddt": plddt}, base_raw
 
         if kind == "structure":
             sequence = str(inputs.get("sequence") or "")

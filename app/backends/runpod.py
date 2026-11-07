@@ -42,14 +42,19 @@ class BackendError(Exception):
 
 class RunpodBackend:
     def __init__(self, settings: Settings, client: httpx.Client | None = None) -> None:
-        if not settings.runpod_endpoint_id:
-            raise BackendError("SCIABLE_RUNPOD_ENDPOINT_ID is required for the runpod backend.")
+        endpoint = settings.runpod_endpoint_for(settings.method)
+        if not endpoint:
+            raise BackendError(
+                f"No Runpod endpoint for method '{settings.method}': set "
+                "SCIABLE_RUNPOD_ENDPOINT_ID, or SCIABLE_RUNPOD_ENDPOINT_IDS with an "
+                "entry for this method."
+            )
         api_key = os.environ.get(settings.runpod_api_key_env)
         if not api_key:
             raise BackendError(
                 f"Runpod API key not found in env var '{settings.runpod_api_key_env}'."
             )
-        self._endpoint = settings.runpod_endpoint_id
+        self._endpoint = endpoint
         self._base = f"{settings.runpod_base_url.rstrip('/')}/{self._endpoint}"
         self._client = client or httpx.Client(
             headers={"Authorization": f"Bearer {api_key}"},
@@ -93,20 +98,33 @@ class RunpodBackend:
         raw_status = data.get("status", "")
         state, error_category = _STATUS_MAP.get(raw_status, (RunState.RUNNING, None))
 
-        output = data.get("output") or {}
+        output = data.get("output")
+        output = output if isinstance(output, dict) else {}
+
+        # A handler-reported failure arrives two ways: Runpod marks the job FAILED and
+        # lifts our returned {"error": <category>} to the top level (the rest under
+        # "output"), or it marks the job COMPLETED with an "error" key inside "output".
+        # Either way, surface the specific category and keep the detail (the runner's
+        # stderr tail — content-free by the worker's contract) so the failure is
+        # debuggable from the run record, not only the provider's live logs. Don't
+        # clobber a more specific mapped category (e.g. "timeout").
+        worker_error = data.get("error") or output.get("error")
+        if worker_error and error_category != "timeout":
+            return JobStatus(
+                state=RunState.FAILED,
+                error_category=str(worker_error),
+                raw={"backend": "runpod", "detail": output.get("detail")},
+            )
+
         outputs: dict = {}
         raw: dict = {}
-        if state is RunState.SUCCEEDED and isinstance(output, dict):
-            if output.get("error"):
-                # Worker reported a handled failure inside a COMPLETED job; keep
-                # the detail (stderr tail) in raw so the failure is debuggable.
-                return JobStatus(
-                    state=RunState.FAILED,
-                    error_category=str(output["error"]),
-                    raw={"backend": "runpod", "detail": output.get("detail")},
-                )
+        if state is RunState.SUCCEEDED:
             outputs = dict(output.get("outputs") or {})
             raw = {"backend": "runpod", **{k: v for k, v in output.items() if k != "outputs"}}
+        elif state is RunState.FAILED:
+            # FAILED with no structured error (infra/OOM/non-dict output) — keep
+            # whatever Runpod returned so the category isn't a bare label.
+            raw = {"backend": "runpod", "detail": output.get("detail") or data.get("output")}
         return JobStatus(
             state=state, outputs=outputs, error_category=error_category, raw=raw
         )

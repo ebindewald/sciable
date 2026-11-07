@@ -1,0 +1,44 @@
+{
+  "method_id": "rhofold",
+  "version": "0.1.0-dev",
+  "title": "RhoFold+ — RNA 3D structure prediction",
+  "description": "Predict a 3D structure for an RNA sequence with RhoFold+, a language-model-based deep learning method, and return the predicted coordinates (PDB) plus per-residue pLDDT confidence. v1 runs in single-sequence mode (no MSA).",
+  "citation": "Shen et al., Accurate RNA 3D structure prediction using a language model-based deep learning approach. Nature Methods (2024). https://doi.org/10.1038/s41592-024-02487-0 — code https://github.com/ml4bio/RhoFold (Apache-2.0).",
+  "source_commit": "PENDING-PIN",
+  "checkpoint_digest": "PENDING-PIN",
+  "worker_image_digest": "PENDING-BUILD",
+  "provisional": true,
+  "runner": "run_rhofold.py",
+  "inputs": {
+    "fields": [
+      {
+        "name": "sequence",
+        "type": "rna_sequence",
+        "required": true,
+        "label": "RNA sequence",
+        "help": "A single RNA sequence over A/C/G/U (N allowed for unknown positions). Predicted in single-sequence mode — no MSA.",
+        "max_length": 200
+      },
+      {
+        "name": "seed",
+        "type": "int",
+        "required": false,
+        "label": "Seed",
+        "help": "Recorded for provenance; RhoFold's prediction is deterministic for a given input."
+      }
+    ]
+  },
+  "outputs": {
+    "kind": "structure_3d",
+    "format": "pdb"
+  },
+  "limits": {
+    "job_timeout_s": 900,
+    "max_in_flight": 1,
+    "max_sequence_length": 200
+  },
+  "example_ref": "methods/rhofold/example/example.fasta",
+  "example_summary": "A 14-nucleotide UUCG-tetraloop hairpin (GGCACUUCGGUGCC), bundled so you can try the sequence -> 3D-structure path without supplying your own.",
+  "example_details": "A well-characterised minimal RNA hairpin: a 5-bp stem (GGCAC/GUGCC) closing the ultra-stable UUCG tetraloop. It exercises the sequence -> PDB + pLDDT path end to end and folds without an MSA. Swap in any single RNA sequence over A/C/G/U. Real inference returns RhoFold's predicted coordinates (per-residue pLDDT in the B-factor column); the stub/fake backend returns a deterministic placeholder PDB (engine=stub).",
+  "notes": "v1 is single-sequence mode (--single_seq_pred True): no MSA generation at runtime, which would need network + databases and break job isolation. MSA-as-optional-upload is deferred (needs a new a3m field type). The checkpoint (rhofold_pretrained_params.pt, cuhkaih/rhofold on Hugging Face) must be pre-baked + checksummed into the worker image — RhoFold auto-downloads it otherwise, which violates the immutable-image / no-runtime-network rule. source_commit, checkpoint_digest, worker_image_digest, max_length and job_timeout_s stay provisional until confirmed by a Runpod smoke run; RhoFold is heavy, so watch cold-start + runtime against the dev budget. Verify the checkpoint's redistribution terms (code is Apache-2.0; weights license is separate) before publishing any image. The runner reports engine=rhofold vs engine=stub."
+}
