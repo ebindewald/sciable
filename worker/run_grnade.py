@@ -153,6 +153,15 @@ def _real_design(pdb_text: str, chain: str, seed: int, count: int, work: Path) -
     # as a temp-file dir); point it at this job's private, writable workspace so
     # featurization cannot write into the shared image. Set BEFORE importing src.*.
     os.environ.setdefault("PROJECT_PATH", str(work))
+    os.environ.setdefault("DATA_PATH", str(work))
+    # ⚠ Upstream evaluates os.path.join(X3DNA_PATH, ...) and os.path.join(ETERNAFOLD_PATH,
+    # ...) as DEFAULT ARGUMENT VALUES at module import (src/data/sec_struct_utils.py),
+    # which raises TypeError if the env var is None. Set placeholder paths so the import
+    # chain loads. These fallback tools are only invoked at runtime if biotite's
+    # sec-struct path fails (our normal PDB path does not hit it); the binaries are NOT
+    # installed, so if that fallback ever triggers it fails loudly, never silently.
+    os.environ.setdefault("X3DNA", "/opt/x3dna")
+    os.environ.setdefault("ETERNAFOLD", "/opt/eternafold")
     if repo not in sys.path:
         sys.path.insert(0, repo)
 
