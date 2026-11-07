@@ -96,8 +96,8 @@ hook needed (structRFM, RhoFold added none). Add one in
 
 See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example.
 
-> ⚠ **Phase B builds from GitHub, not your working tree.** Both the GHA workflow and
-> Runpod's GitHub import build the image from the **pushed commit** — so **commit + push
+> ⚠ **Phase B builds from GitHub, not your working tree.** Runpod's GitHub import
+> builds the image from the **pushed commit** — so **commit + push
 > first**, and treat every later `worker/` change the same way: push → rebuild the image →
 > update the endpoint to the new image. Unpushed edits (a new runner, a `handler.py
 > RUNNERS` line, a Dockerfile fix) never reach a running endpoint — the job keeps failing
@@ -121,28 +121,36 @@ See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example
   requirements (pip would replace it with a kernel-less build). Keep the runner's
   fail-fast GPU arch check.
 - ⚠ **Second-method Dockerfile**: the repo-root `Dockerfile` is structRFM's, so a new
-  method uses its own `worker/Dockerfile.<id>`. Runpod's GitHub import now has a
-  **Dockerfile Path** field (enter `worker/Dockerfile.<id>`, Branch `main`) — so you can
-  still let Runpod build from GitHub (no GHCR). GitHub Actions → GHCR is the fallback.
-  (The old "root Dockerfile only / no subpath" limitation is gone.)
+  method uses its own `worker/Dockerfile.<id>`. Runpod's GitHub import has a
+  **Dockerfile Path** field (hidden in the collapsed "Repository Configuration"
+  section — enter `/worker/Dockerfile.<id>`, Branch `main`). This is the ONLY deploy
+  path — no GHCR, no Docker Hub, no publishing outside the GitHub repo
+  (see `docs/ENDPOINT_SETUP.md`, "What NOT to do").
+- ⚠ **Scan upstream's REAL imports before the first build** — don't trust its
+  requirements/env file. Unconditional module-level imports of "optional" features
+  are common (RhoFold: `matplotlib` in the model code, `simtk`/OpenMM via an
+  unconditional `AmberRelaxation` import even with relax disabled). One command:
+  `grep -rhE '^\s*(import|from) [a-zA-Z_]+' <pkg>/ <entry>.py | sed -E
+  's/^\s*//;s/(import|from) ([a-zA-Z0-9_]+).*/\2/' | sort -u`, then check each
+  third-party hit is in `requirements-<id>.txt` (or verifiably guarded by
+  try/except / function scope). Each miss costs a push→rebuild→smoke cycle.
 - ⚠ **Dep drift**: upstream's py3.7 pins (`numpy==1.21.2`, …) won't build on the
   py3.11 base. Use modern compatible versions; pin what the first build proves. (See
   the `pyarrow==17` note in `requirements-structrfm.txt` for the flavor of surprise.)
 
 ### B3. Build the image (no local Docker needed)
-- **Add** `.github/workflows/build-<id>-worker.yml` (copy the structRFM/RhoFold one):
-  builds `linux/amd64`, pushes `ghcr.io/<owner>/<id>-worker`, prints the digest.
-- Push → watch **Actions** → make the GHCR package **Public** (or add a Runpod
-  registry credential).
-- **Done when:** the job summary shows the image + digest.
+- Nothing to add: Runpod builds `worker/Dockerfile.<id>` itself when the endpoint is
+  created from the GitHub import (B4), and rebuilds on every push to `main`.
+- **Done when:** the endpoint's **Builds** tab shows COMPLETED (~5 min observed;
+  hard 30-min cap on the `docker build` step).
 
 ### B4. Endpoint + live run
-- ⚠ **Manual step in the Runpod web console — nothing in the repo creates the
-  endpoint.** You do this by hand; skipping it is a common cause of "it still fails."
-- Runpod → Serverless → **New Endpoint → Docker Image** → in **Container Image** enter the
-  GHCR *image ref* (e.g. `ghcr.io/<owner>/<id>-worker:latest`), **not** a URL. (The GHCR
-  package must be **Public**, or add a Runpod registry credential, or the pull fails.)
-  **0 min / 1 max workers** (dev-budget rule — no idle GPU spend). Copy the **endpoint id**.
+- ⚠ **Manual step in the Runpod web console — nothing in the repo (and no API) creates
+  a GitHub-sourced endpoint.** The operator does this by hand following
+  **`docs/ENDPOINT_SETUP.md`** (the golden-path walkthrough: Import Git Repository →
+  expand "Repository Configuration" → Dockerfile Path `/worker/Dockerfile.<id>` →
+  name `sciable-<id>` → 24 GB tier, all card types → **0 min / 1 max workers** →
+  ignore the `runpod.serverless.start()` warning). Copy the **endpoint id**.
 - The app wants that **endpoint id** (not a URL): `SCIABLE_RUNPOD_ENDPOINT_IDS='{"<id>":"<endpoint-id>"}'`
   (or `SCIABLE_METHOD=<id>` + `SCIABLE_RUNPOD_ENDPOINT_ID=<endpoint-id>`); it builds
   `https://api.runpod.ai/v2/<endpoint-id>/run` itself. **If the endpoint doesn't exist /
@@ -186,8 +194,9 @@ See `docs/RHOFOLD_DEPLOY.md` / `docs/STRUCTRFM_DEPLOY.md` for the worked example
 
 ## Gotcha index (things that will bite, pre-answered)
 - Job **hangs** on GPU → old torch, no sm_120 kernels → 2.7.1 base, unpinned torch.
-- Runpod "**no Dockerfile found**" → it only auto-detects root `Dockerfile`; use GHA + GHCR for a 2nd method.
-- Runpod **build fails with empty log** → it's their builder; Rebuild once, else GHA.
+- Runpod "**no Dockerfile found**" / wrong image built → the **Dockerfile Path** field hides in the collapsed "Repository Configuration" section of the GitHub import; set `/worker/Dockerfile.<id>` and wait for the re-check.
+- Runpod **build fails with empty log** → it's their builder; Rebuild once, else report it — do NOT invent an alternative build path.
+- `ModuleNotFoundError` on the smoke run → upstream has unconditional imports its requirements never listed; run the B2 import scan, add the dep, push (auto-rebuilds).
 - Model **downloads weights at runtime** → pre-bake + checksum; point code at the local path.
 - Output **looks too clean / same per length** → still the stub; check `raw.engine`.
 - `pip` **downgrades/crashes** on upstream's old pins → they're py3.7; use modern versions on the 2.7 base.

@@ -1,7 +1,7 @@
 # Deploying real RhoFold+ on your own Runpod endpoint
 
 How to replace the RhoFold **stub** with real inference and prove it works. The app,
-form, validation, isolation, results UI, API, worker runner, Dockerfile, and GHA build
+form, validation, isolation, results UI, API, worker runner, and Dockerfile
 are already done and tested; this is the GPU + weights step, run in your Runpod account.
 
 **Upstream:** <https://github.com/ml4bio/RhoFold> (Apache-2.0 code) ·
@@ -27,61 +27,24 @@ Phase B.
 ## Prerequisites
 
 - A Runpod account + API key (server-side; referenced by env-var *name*, never stored).
-- GHCR push access (the GHA workflow handles the build — no local Docker needed).
-
 ---
 
-## Step 1 — Build the worker image
+## Steps 1+2 — Endpoint + image (one console step)
 
-RhoFold's recipe is `worker/Dockerfile.rhofold` (not the repo-root `Dockerfile`, which is
-structRFM's). Two no-local-Docker ways to build it; **Option A is simplest.**
+Follow **`docs/ENDPOINT_SETUP.md`** — the golden path and the ONLY supported deploy
+mechanism (no GHCR, no Docker Hub, nothing published outside the GitHub repo). In
+short: console → New Endpoint → Import Git Repository → expand "Repository
+Configuration" → **Dockerfile Path `/worker/Dockerfile.rhofold`**, Branch `main` →
+name `sciable-rhofold`, Queue, 24 GB tier (all card types), **0 min / 1 max workers**,
+600 s timeout → Deploy. Runpod builds the image itself into its private registry
+(~5 min observed; done 2026-11-07 → endpoint `bbm66nm4lkagtj`) and rebuilds on every
+push to `main`. Copy the **endpoint id**.
 
-### Option A (recommended) — Runpod builds from GitHub, no GHCR
-
-Runpod's GitHub integration now has a **Dockerfile Path** field, so a non-root Dockerfile
-works (the old "no Dockerfile found at that path" limitation is gone):
-
-1. Push the repo (already done if your `worker/` changes are on `main`).
-2. Runpod → Serverless → **New Endpoint → Import Git Repository** → connect GitHub →
-   pick the repo → **Branch:** `main` → **Dockerfile Path:** `worker/Dockerfile.rhofold`
-   (build context is the repo root, so the `COPY worker/...` lines resolve). Do **not**
-   add a `.runpod/hub.json` (keeps you off the public Hub).
-3. Runpod builds + stores the image and creates the endpoint (continue at Step 2 below).
-
-Caveats: 30-min build limit (clone upstream + torch 2.7 + full checkpoint snapshot — watch
-it); first build is unpinned (`RHOFOLD_COMMIT=main`, checksum skipped with a warning — grab
-the printed sha to pin later); if the build fails with an **empty log** it's Runpod's
-builder — Rebuild once, else use Option B.
-
-### Option B (fallback) — GitHub Actions → GHCR → "Docker Image"
-
-Build `worker/Dockerfile.rhofold` via Actions and have Runpod pull from GHCR.
-
-1. The workflow `.github/workflows/build-rhofold-worker.yml` builds on every push to
-   `main` touching `worker/Dockerfile.rhofold`, `worker/requirements-rhofold.txt`,
-   `worker/run_rhofold.py`, or the handler — or via **workflow_dispatch** (pass the
-   upstream commit to pin). Watch it under the repo's **Actions** tab (~15–40 min; the
-   job summary prints the image tags + digest).
-2. Make it pullable: GitHub → profile → **Packages** → `rhofold-worker` → Package
-   settings → **Change visibility → Public**. (Or keep private and add a GHCR credential
-   in Runpod → Settings → Container Registry Auth: username = GitHub user, password = a
-   PAT with `read:packages`.)
-3. Put the printed digest in `methods/rhofold/manifest.json` (`worker_image_digest`).
-
-**For a reproducible/pinned image** replace the placeholders first (via
-workflow_dispatch input or build-args): `RHOFOLD_COMMIT=<full-sha>` (don't ship `main`),
-and `RHOFOLD_CKPT_SHA256` — download the checkpoint once, `sha256sum` it, and
-**verify its redistribution license** (code is Apache-2.0; the weights' terms are
-separate) before publishing.
-
-## Step 2 — Create the Runpod Serverless endpoint
-
-- New Serverless endpoint from `ghcr.io/<owner>/rhofold-worker:<tag>` (**Docker Image**
-  flow, not the GitHub-import flow).
-- **Workers: 0 min / 1 max** (dev-budget rule — no idle GPU spend).
-- A GPU with enough VRAM for RhoFold (a mid GPU is fine for small RNAs). The image uses
-  the torch 2.7.1 / CUDA 12.8 base, so modern GPUs (incl. Blackwell/sm_120) are covered.
-- Copy the **endpoint id**.
+**For a reproducible/pinned image** replace the Dockerfile placeholders:
+`RHOFOLD_COMMIT=<full-sha>` (don't ship `main`) and `RHOFOLD_CKPT_SHA256` — download
+the checkpoint once, `sha256sum` it, and **verify its redistribution license** (code
+is Apache-2.0; the weights' terms are separate). Put the built image digest in
+`methods/rhofold/manifest.json` (`worker_image_digest`).
 
 ## Step 3 — Point the app at it and run
 

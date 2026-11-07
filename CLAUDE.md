@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Read `AGENTS.md` before starting work. The notes below distill the parts that constrain *how* code should be written; `AGENTS.md` wins on any conflict.
 
+**Deploying a method to Runpod has exactly one supported path** — the operator creates the endpoint in the Runpod console via GitHub import (Runpod builds `worker/Dockerfile.<method>` into its private registry): see `docs/ENDPOINT_SETUP.md`, including its **"What NOT to do"** list (never publish images/packages anywhere public, never invent a new build/deploy mechanism, never re-litigate the pinned torch 2.7.1/cu128 base).
+
 ## Commands
 
 Python 3.12 (provided by `.devcontainer`).

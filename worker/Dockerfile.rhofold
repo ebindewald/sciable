@@ -6,9 +6,9 @@
 # the pre-baked checkpoint (RHOFOLD_CHECKPOINT); without the checkpoint the runner
 # falls back to a clearly-marked stub (CPU/CI only).
 #
-# NOT the repo-root Dockerfile (that one is structRFM's — Runpod only auto-detects a
-# single root Dockerfile). Build THIS one via GitHub Actions and deploy from GHCR
-# with Runpod's "Docker Image" flow — see docs/RHOFOLD_DEPLOY.md.
+# NOT the repo-root Dockerfile (that one is structRFM's). Built by Runpod's console
+# GitHub import with Dockerfile Path = /worker/Dockerfile.rhofold into Runpod's
+# private registry — the only supported deploy path; see docs/ENDPOINT_SETUP.md.
 #
 # Upstream: https://github.com/ml4bio/RhoFold  (Apache-2.0)
 # Checkpoint: rhofold_pretrained_params.pt  (huggingface.co/cuhkaih/rhofold)

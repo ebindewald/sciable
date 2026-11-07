@@ -23,14 +23,14 @@ numpy
 scipy
 transformers
 tokenizers
+# rhofold/model/primitives.py does `import matplotlib.pyplot` at module level
+# (unconditional — first smoke run 2026-11-07 failed without it).
+matplotlib
+# inference.py does `from rhofold.relax.relax import AmberRelaxation` at module
+# level, which executes `from simtk.openmm.app import *` — so OpenMM is required
+# even with RHOFOLD_RELAX_STEPS=0. The openmm wheel (verified 8.6.1) still ships
+# the legacy `simtk` shim upstream imports. No pdbfixer anywhere upstream.
+openmm
 # Used at build time to bake the full checkpoint repo, and by upstream inference.py
 # at runtime (it calls snapshot_download unconditionally — we run it HF_HUB_OFFLINE=1).
 huggingface_hub
-
-# Amber relaxation (inference.py --relax_steps > 0) needs OpenMM + pdbfixer. The
-# image defaults to RELAX_STEPS=0 (reads unrelaxed_model.pdb) to avoid these heavy
-# deps. IF the unrelaxed PDB has no per-residue pLDDT in its B-factor column (the
-# runner fails loud: "no parseable pLDDT"), enable relax: set RHOFOLD_RELAX_STEPS=1000
-# and uncomment the two lines below, then rebuild.
-# openmm
-# pdbfixer @ git+https://github.com/openmm/pdbfixer.git

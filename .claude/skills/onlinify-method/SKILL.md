@@ -1,6 +1,6 @@
 ---
 name: onlinify-method
-description: Turn an upstream AI model (a GitHub repo or Python package — not necessarily pure PyTorch) into a new sciable method exposed through the web form + async API, following the manifest + runner + one-registry-line pattern. Does the whole GPU-free control-plane half autonomously (manifest, output kind, fake-backend placeholder, worker runner, tests — green under pytest), then emits the Phase B build files (requirements, Dockerfile, GHA workflow, deploy doc) with a handoff checklist for the GPU/weights steps you run in your own Runpod account. Use when the user invokes /onlinify-method, or asks to "add/spin up/onlinify a method", "wrap <model> as a webservice", or "integrate <RNA model>".
+description: Turn an upstream AI model (a GitHub repo or Python package — not necessarily pure PyTorch) into a new sciable method exposed through the web form + async API, following the manifest + runner + one-registry-line pattern. Does the whole GPU-free control-plane half autonomously (manifest, output kind, fake-backend placeholder, worker runner, tests — green under pytest), then emits the Phase B files (requirements, Dockerfile, deploy doc) with a handoff checklist for the operator's console endpoint-creation step (docs/ENDPOINT_SETUP.md) in your own Runpod account. Use when the user invokes /onlinify-method, or asks to "add/spin up/onlinify a method", "wrap <model> as a webservice", or "integrate <RNA model>".
 triggers:
   keywords: ["onlinify", "onlinify-method", "add a method", "spin up a method", "wrap a model", "integrate a model", "new method"]
   patterns: ["onlinify <model>", "add <model> as a method", "wrap <model>", "spin up <model>", "make a webservice for <model>"]
@@ -46,6 +46,11 @@ repo at its current state:
   (if so, it must be pre-baked — a hard constraint).
 - Any MSA/database/network dependency (prefer a self-contained single-sequence mode;
   defer MSA-upload).
+- **Scan the package's actual module-level imports** (checklist B2 has the one-liner)
+  and reconcile against the requirements you'll write — upstream repos routinely
+  import "optional" features unconditionally (RhoFold: matplotlib in model code,
+  simtk/OpenMM via an unconditional relax import). Every miss costs a
+  push→rebuild→smoke cycle on the GPU.
 
 Fill the **5 scoping answers** from `METHOD_INTEGRATION_CHECKLIST.md` ("Before you
 start"). Report them back in one short block before editing.
@@ -91,12 +96,12 @@ Produce, with `PENDING`/`REPLACE_WITH_VERIFIED_SHA256` placeholders:
   upstream's old py3.7 pins.
 - `worker/Dockerfile.<id>` — pre-bake + checksum the checkpoint (no runtime download),
   pin the upstream commit via build-arg, non-root. Use `worker/Dockerfile.<id>` (NOT the
-  root Dockerfile — Runpod auto-detects only one, already taken) and build it via GHA.
-- `.github/workflows/build-<id>-worker.yml` — copy the RhoFold one; builds linux/amd64 →
-  GHCR, prints the digest.
+  root Dockerfile — that's structRFM's). Runpod builds it when the operator creates the
+  endpoint via the console GitHub import (`docs/ENDPOINT_SETUP.md`); there is no CI
+  build file to emit.
 - `docs/<ID>_DEPLOY.md` — copy the structRFM/RhoFold deploy doc; the operator's Phase B
-  runbook (pin, build, endpoint at 0/1 workers, prove real≠stub via `raw.engine`,
-  validate vs upstream, flip `provisional:false`, teardown).
+  runbook (pin, endpoint per `docs/ENDPOINT_SETUP.md` at 0/1 workers, prove real≠stub
+  via `raw.engine`, validate vs upstream, flip `provisional:false`, teardown).
 
 ## Step 5 — Report
 
@@ -105,7 +110,9 @@ Summarize in this shape:
 - Phase A: files added/changed, `pytest` result (counts).
 - Any **license or compatibility risk** flagged (e.g. torch-2.7 API-compat unverified).
 - Phase B handoff: the ordered checklist (**commit + push the worker code** → pin →
-  verify weights license → build via GHA → make the GHCR package public → **manually create its own Runpod endpoint (Docker Image flow) in the web console — nothing in the repo does this** → point the app at that endpoint id → smoke run **(confirm
+  verify weights license → **operator manually creates the method's own Runpod endpoint
+  via the console GitHub import per `docs/ENDPOINT_SETUP.md` — no API/repo mechanism
+  does this; Runpod builds the image itself** → point the app at that endpoint id → smoke run **(confirm
   the endpoint actually serves this method — a reused/stale image returns
   `error: unknown_method` in ~70ms)** → validate → un-flag → teardown) and which doc to
   follow. Each method needs an endpoint whose image includes its runner + weights;
@@ -118,6 +125,14 @@ Summarize in this shape:
   `SCIABLE_METHOD=<id> uvicorn app.main:app --port 8099`.
 
 ## Guardrails (from CLAUDE.md / AGENTS.md — non-negotiable)
+- **One golden path, no inventions** (`docs/ENDPOINT_SETUP.md` "What NOT to do"):
+  never publish anything outside the GitHub repo (no GHCR, Docker Hub, public
+  packages, or new accounts — GHCR was tried and explicitly rejected 2026-11-07);
+  never invent a new container/build/deploy mechanism; deploy = Runpod console
+  GitHub import into Runpod's private registry, full stop. Stale references to
+  other paths in old docs/chats are dead ends — remove them, don't follow them.
+- **Don't re-litigate the stack**: base `pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime`,
+  torch unpinned, until a model demonstrably breaks on it.
 - Secrets (Runpod key) stay server-side; never in code, logs, payloads, or image.
 - Job isolation: fresh subprocess, private work/home/tmp, args as an array, cleanup.
 - Pin commit + checkpoint + example; verify redistribution terms before publishing.

@@ -25,92 +25,48 @@ the weights, so it runs in your Runpod account, not locally.
 
 ## Prerequisites
 
-- A Runpod account + API key (kept server-side; referenced by env-var *name*).
-- A container registry you can push to (Docker Hub, GHCR, …).
-- Docker with `buildx` (the Runpod GPU hosts are `linux/amd64`).
+- A Runpod account + API key (kept server-side; referenced by env-var *name*),
+  with the GitHub account connected (Runpod builds the image — no local Docker,
+  no external registry).
 
 ---
 
 ## Step 1 — Get the worker image built
 
-The structRFM image recipe is the **root `Dockerfile`** (named literally
-`Dockerfile`, at the repo root — Runpod's GitHub builder auto-detects it there;
-custom names/subpaths like `worker/Dockerfile.structrfm` triggered a
-"no Dockerfile found at that path" error). Two ways to build it.
-
-### Option A (recommended, no local Docker) — Runpod builds from GitHub
-
-Runpod can pull your repo, build the Dockerfile on its own infrastructure
-(linux/amd64 — no Mac/Apple-Silicon arch issues), and deploy the endpoint for you.
-This is the **private** Serverless flow, NOT the public Runpod Hub — do not add a
-`.runpod/hub.json` (its absence keeps you off the Hub).
+The structRFM image recipe is the **root `Dockerfile`** (historical: structRFM
+claimed the root slot before the Dockerfile Path field existed; every later method
+uses `worker/Dockerfile.<id>`). It is built by **Runpod's console GitHub import**,
+the ONLY supported deploy path — no GHCR, no Docker Hub, nothing published outside
+the GitHub repo. See **`docs/ENDPOINT_SETUP.md`** for the golden-path walkthrough
+and the what-NOT-to-do list.
 
 1. Push this repo to GitHub (the root `Dockerfile` must be present).
 2. Runpod console → **Serverless → New Endpoint → Import Git Repository** →
-   connect GitHub → pick the repo → branch `main` → **leave Dockerfile Path EMPTY**
-   (root). Do not use the "publish to Hub" path.
-3. Runpod builds + stores the image and creates the endpoint (continue at step 2).
+   pick the repo → branch `main` → Dockerfile Path `/Dockerfile` (the default).
+   Do not add a `.runpod/hub.json` (its absence keeps you off the public Hub).
+3. Runpod builds + stores the image in its private registry and creates the
+   endpoint (continue at step 2). It rebuilds on every push to `main`.
 
-Caveats: the build must finish in **30 minutes** (ours clones upstream, installs
-torch 2.0.1 + transformers + structRFM + BPfold, and downloads the ~300 MB
-checkpoint — usually fine), one GitHub account per Runpod account, and the first
-build runs **unpinned** (the Dockerfile skips the checksum and prints the
-checkpoint's sha256 in the build log — grab it to pin later). Docs:
-<https://docs.runpod.io/serverless/workers/github-integration>
+Caveats: the `docker build` step must finish in **30 minutes** (ours clones
+upstream, installs torch + transformers + structRFM + BPfold, and downloads the
+~300 MB checkpoint — observed ~5 min), the first build runs **unpinned** (the
+Dockerfile skips the checksum and prints the checkpoint's sha256 in the build
+log — grab it to pin later), and **if the build fails with an EMPTY log** it's
+Runpod's builder, not this repo — click **Rebuild** once, else open a Runpod
+support ticket (do NOT invent an alternative build path).
 
-**If the build shows "build failed" with an EMPTY log**, the failure is inside
-Runpod's builder, not in this repo (users have reported the same on unmodified
-forks of Runpod's own `worker-basic` template). Click **Rebuild** once; if it
-fails again with no log, switch to Option C and open a Runpod support ticket.
-
-### Option C (recommended fallback, no local Docker) — GitHub Actions builds, Runpod pulls
-
-`.github/workflows/build-structrfm-worker.yml` builds the root `Dockerfile` for
-`linux/amd64` on every push to `main` that touches `Dockerfile`, `handler.py` or
-`worker/` (or on manual dispatch), and pushes
-`ghcr.io/<owner>/structrfm-worker:latest` plus a `sha-<commit>` tag.
-
-1. Push the workflow; watch the run under the repo's **Actions** tab (first run
-   ~15-30 min). The job summary prints the image tags and digest.
-2. Make the package pullable by Runpod: GitHub → your profile → **Packages** →
-   `structrfm-worker` → Package settings → **Change visibility → Public**.
-   (Or keep it private and add a GHCR credential in Runpod → Settings →
-   Container Registry Auth: username = GitHub user, password = a PAT with
-   `read:packages`.)
-3. Runpod console → **Serverless → New Endpoint → Docker Image** →
-   `ghcr.io/<owner>/structrfm-worker:latest` (continue at Step 2 below).
-4. Put the printed digest in `methods/structrfm/manifest.json`
-   (`worker_image_digest`).
-
-### Option B — build locally with Docker Desktop and push
-
-For a reproducible/pinned image, build it yourself. Replace the three pins first
+**For a reproducible/pinned image**, set the build pins in the Dockerfile
 (reproducibility — see CLAUDE.md "pinned-and-checksummed weights"):
-
-1. **Pick the upstream commit.** Find the commit behind the SSP release you want
-   and use its full hash as `STRUCTRFM_COMMIT` (don't ship `master`).
-2. **Checksum the checkpoint.** Download it once and hash it:
-   ```bash
-   wget https://github.com/heqin-zhu/structRFM/releases/latest/download/structRFM_SSP_bpRNA1m.pt
-   sha256sum structRFM_SSP_bpRNA1m.pt   # -> put this in STRUCTRFM_SSP_SHA256
-   ```
-   Also pin `STRUCTRFM_RELEASE` to a specific release tag instead of `latest`.
-3. **Build + push** for the GPU hosts' architecture:
-   ```bash
-   docker build --platform linux/amd64 -f Dockerfile \
-     --build-arg STRUCTRFM_COMMIT=<full-sha> \
-     --build-arg STRUCTRFM_RELEASE=<tag> \
-     --build-arg STRUCTRFM_SSP_SHA256=<sha256> \
-     -t <registry>/structrfm-worker:<tag> .
-   docker push <registry>/structrfm-worker:<tag>
-   ```
-   Record the pushed image digest in `methods/structrfm/manifest.json`
-   (`worker_image_digest`) and the commit/checkpoint hashes in `source_commit` /
-   `checkpoint_digest`.
+`STRUCTRFM_COMMIT=<full-sha>` (don't ship `master`), `STRUCTRFM_RELEASE=<tag>`
+(not `latest`), and `STRUCTRFM_SSP_SHA256` (download the checkpoint once,
+`sha256sum` it). Record the built image digest in
+`methods/structrfm/manifest.json` (`worker_image_digest`) and the
+commit/checkpoint hashes in `source_commit` / `checkpoint_digest`.
 
 ## Step 2 — Create the Runpod Serverless endpoint
 
-- New Serverless endpoint from `<registry>/structrfm-worker:<tag>`.
+- Created together with the build in Step 1 (the GitHub import creates both).
+  Live endpoint: `sciable-grnade-structrfm` = `5gyt0w5he0m4qq`.
 - **Workers: 0 min / 1 max** (dev budget rule — no idle GPU spend).
 - A GPU with enough VRAM for the base model (~300 MB weights + activations; a
   small GPU is fine).
