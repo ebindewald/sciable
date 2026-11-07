@@ -41,7 +41,7 @@ backbone* — a successful run does not validate folding or biological function.
 | Code license | **MIT** (verified) |
 | Weights license | gRNAde `.h5` is **MIT** on HF; the HF repo also bundles rhofold/ribonanzanet weights under their own LICENSEs (not baked here) — verify if you enable scoring |
 | Pinned commit | `2453b18778a1981ac25f314790e5395f1e9ab218` (gRNAde v1.0 release, 2025-12-15) — verified from GitHub, build-unverified |
-| Checkpoint | `gRNAde_drop3d@0.75_maxlen@500.h5` (~8.3 MB), `huggingface.co/chaitjo/gRNAde`, **no runtime auto-download** (`torch.load` from a local path) — pre-baked + checksummed by the Dockerfile |
+| Checkpoint | `gRNAde_drop3d@0.75_maxlen@500.h5` (8,726,092 B), `huggingface.co/chaitjo/gRNAde` rev `91491fc71584bf37fee8297781edf7df07b1d349`, **no runtime auto-download** (`torch.load` from a local path). Pinned sha256 `d43454…62971c`; pre-baked + checksummed by the Dockerfile |
 
 > ⚠ Upstream was rewritten for v1.0: the old `gRNAde.py` wrapper is gone. The runner uses
 > the new `src.*` programmatic API and omits the RibonanzaNet scoring loop. See

@@ -30,10 +30,12 @@ FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 # Verified from GitHub (gRNAde v1.0 release, 2025-12-15) but build-unverified. Ship the
 # full sha, never a branch; bump only with a re-verified commit.
 ARG GRNADE_COMMIT=2453b18778a1981ac25f314790e5395f1e9ab218
-# Pin the checkpoint: download once, sha256sum it, and set this. Until then the build
-# warns and continues (dev). The HF repo id and the single file baked below.
-ARG GRNADE_CKPT_SHA256=REPLACE_WITH_VERIFIED_SHA256
+# Checkpoint pinned (verified 2026-11-07): downloaded from HF and sha256summed locally.
+# gRNAde_drop3d@0.75_maxlen@500.h5 = 8,726,092 bytes. GRNADE_CKPT_REV pins the HF repo
+# revision so a later HF push can't silently change the baked weights.
+ARG GRNADE_CKPT_SHA256=d43454deaeec773644bfa52385b6fcc8264db256878fd9ca19ed8711ec62971c
 ARG GRNADE_CKPT_REPO=chaitjo/gRNAde
+ARG GRNADE_CKPT_REV=91491fc71584bf37fee8297781edf7df07b1d349
 ARG GRNADE_CKPT_FILE=gRNAde_drop3d@0.75_maxlen@500.h5
 
 ENV PYTHONUNBUFFERED=1 \
@@ -56,12 +58,14 @@ RUN pip install --no-cache-dir -r worker/requirements-grnade.txt
 
 # PyG compiled companions, matched to the EXACT torch build in the base image (do NOT
 # pin a torch version string by hand — derive it, so a base bump can't silently install
-# a mismatched/CPU wheel). featurizer.py imports torch_cluster + torch_geometric; the
-# GVP model uses torch_scatter/torch_sparse.
+# a mismatched/CPU wheel). The real import chain uses torch_cluster (featurizer) and
+# torch_scatter (GVP layers) + torch_geometric; torch_sparse is NOT imported, so it is
+# not installed. Verified: data.pyg.org/whl/torch-2.7.1+cu128.html carries pt27cu128
+# cp311 wheels for both.
 RUN TORCH_VER="$(python -c 'import torch; print(torch.__version__)')" \
     && echo "Installing PyG wheels for torch ${TORCH_VER}" \
     && pip install --no-cache-dir torch_geometric \
-    && pip install --no-cache-dir torch_scatter torch_sparse torch_cluster \
+    && pip install --no-cache-dir torch_scatter torch_cluster \
          -f "https://data.pyg.org/whl/torch-${TORCH_VER}.html"
 
 # Clone upstream at the pinned commit; the runner imports /opt/grnade/src/*.
@@ -74,7 +78,8 @@ RUN git clone https://github.com/chaitjo/geometric-rna-design /opt/grnade \
 # path GRNADE_CHECKPOINT points at. No runtime download: upstream loads it from a local
 # path (torch.load), so a baked file is all the runner needs.
 RUN python -c "import os; from huggingface_hub import hf_hub_download; \
-      p = hf_hub_download(repo_id='${GRNADE_CKPT_REPO}', filename='${GRNADE_CKPT_FILE}', local_dir='/opt/grnade_ckpt'); \
+      p = hf_hub_download(repo_id='${GRNADE_CKPT_REPO}', filename='${GRNADE_CKPT_FILE}', \
+          revision='${GRNADE_CKPT_REV}', local_dir='/opt/grnade_ckpt'); \
       print('downloaded', p)" \
     && test -f "${GRNADE_CHECKPOINT}" \
     && if [ "${GRNADE_CKPT_SHA256}" = "REPLACE_WITH_VERIFIED_SHA256" ]; then \

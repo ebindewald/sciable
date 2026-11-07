@@ -3,46 +3,43 @@
 # Upstream (MIT): https://github.com/chaitjo/geometric-rna-design — the "gRNAde v1.0
 # release" (commit 2453b18778a1981ac25f314790e5395f1e9ab218, 2025-12-15). It is not a
 # clean PyPI package; worker/Dockerfile.grnade clones it at that commit and the runner
-# imports its src.* API directly (featurizer + model), so these are the deps that API
-# needs — NOT upstream's full conda env.
+# imports its src.* API directly (featurizer + model).
 #
-# ⚠ torch is NOT pinned here and NOT listed: the image builds on
+# This list is the VERIFIED transitive module-level import chain of the real path
+# (src.constants + src.data.featurizer + src.models), traced at the pinned commit:
+#   src.constants         -> wandb
+#   src.layers            -> torch, torch_geometric, torch_scatter
+#   src.models            -> torch, torch_geometric
+#   src.data.featurizer   -> numpy, torch, torch_cluster, torch_geometric
+#   src.data.data_utils   -> biotite, cpdb (pip: cpdb-protein), numpy, pandas, torch
+#   src.data.sec_struct_utils -> biotite, numpy, wandb, Bio (biopython)
+# Upstream's heavier env deps (matplotlib, sklearn, torchmetrics, MDAnalysis, arnie,
+# draw_rna, lovely_*, einops, tqdm, scipy) are imported ONLY by trainer/viz/evaluator,
+# which this runner never imports — so they are deliberately omitted.
+#
+# ⚠ torch is NOT pinned/listed: the image builds on
 # pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime (modern-GPU kernels, sm_50..sm_120).
 # Upstream pins torch 2.1.0+cu121 (docs/installation.md); pinning it here would pull a
 # build without newer-GPU kernels (the structRFM/RhoFold sm_120-hang trap). torch-2.7
 # API-compat with gRNAde's GVP layers is UNVERIFIED — confirm on the first smoke run.
 #
-# ⚠ The PyG compiled companions (torch_geometric, torch_cluster, torch_scatter,
-# torch_sparse) are NOT here — they need wheels matched to the EXACT installed torch
-# build, so Dockerfile.grnade installs them with a find-links derived from the running
-# torch version. Listing them here would let pip grab a mismatched/CPU wheel.
-#
-# ⚠ FIRST-BUILD RISK: these are modern py3.11-compatible picks, not upstream's py3.10
-# pins. Before the first build, run the checklist B2 import scan at the pinned commit
-# over src/ and tools/ and reconcile — gRNAde's featurizer/model/sec_struct_utils pull
-# several libs at module level and this list may miss one.
+# ⚠ The PyG compiled companions (torch_geometric + torch_cluster + torch_scatter) are
+# installed in Dockerfile.grnade, matched to the EXACT torch build via a find-links URL
+# derived from torch.__version__ (verified: data.pyg.org has pt27cu128 cp311 wheels).
+# torch_sparse is NOT imported by the real chain, so it is not installed.
 
 runpod>=1.6
 
-# Numerics / data (design.py + src.* module-level imports)
 numpy
-scipy
 pandas
-tqdm
-pyyaml
-python-dotenv
-
-# PDB / structure parsing used by src/data/data_utils.py featurization.
 biopython
 biotite
-# data_utils.py does `import cpdb` (fast PDB->DataFrame parser) at module level.
-# ⚠ Verify the exact distribution name resolves to the `cpdb` import on first build.
-cpdb
-
-# src/data/sec_struct_utils.py imports wandb at module level (even for inference).
+# src/data/data_utils.py does `import cpdb` (cpdb.parse); the pip distribution that
+# provides that import is cpdb-protein (upstream installs `cpdb-protein`). Verified:
+# cpdb-protein 0.3.1 ships a manylinux cp311 wheel, so no compiler is needed.
+cpdb-protein
+# src/constants.py and src/data/sec_struct_utils.py import wandb at module level.
 wandb
-# src/models.py GVP layers / featurizer use these at module level.
-einops
 
-# Used at build time to bake the checkpoint repo (hf download) and harmless at runtime.
+# Used at build time to bake the one checkpoint (hf_hub_download); harmless at runtime.
 huggingface_hub
