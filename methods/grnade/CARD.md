@@ -30,7 +30,7 @@ backbone* — a successful run does not validate folding or biological function.
 | Inputs | `structure` (pdb_structure, required), `chain` (text), `design_count` (int, default 5, cap 10), `seed` (int) |
 | Output | `sequences` (FASTA) |
 | Limits (provisional) | `max_sequence_length: 400`, `job_timeout_s: 900`, `max_in_flight: 1` |
-| Example | 6-nt synthetic backbone, chain A (`methods/grnade/example/`) |
+| Example | Real 12-nt RNA hairpin — PDB 1ZIH model 1, chain A, `GGGCGCAAGCCU` (`methods/grnade/example/`) |
 
 ## Upstream (verified 2026-11-07)
 

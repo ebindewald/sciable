@@ -15,7 +15,7 @@ def test_accepts_example(manifest, example_pdb):
     assert result.values["chain"] == "A"
     assert result.values["design_count"] == 5  # manifest default
     assert result.seed == 7
-    assert result.values["sequence_length"] == 6
+    assert result.values["sequence_length"] == 12  # 1ZIH model 1, GGGCGCAAGCCU
 
 
 def test_empty_input_rejected(manifest):

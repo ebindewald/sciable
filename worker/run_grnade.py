@@ -180,11 +180,14 @@ def _real_design(pdb_text: str, chain: str, seed: int, count: int, work: Path) -
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-    # Featurize the (single-chain) PDB.
+    # Featurize the (single-chain) PDB. Featurize on CPU (the upstream default) and move
+    # the resulting graph to the GPU afterward — exactly as design.py does
+    # (`featurizer(raw).to(device)`). Passing device=cuda into the featurizer mixes
+    # CPU/GPU tensors inside its __call__ (`torch.BoolTensor(...) & mask_seq`) and crashes.
     pdb_path = work / "target.pdb"
     pdb_path.write_text(_filter_chain(pdb_text, chain))
     _log(f"featurizing target (chain={chain!r})")
-    featurizer = RNAGraphFeaturizer(device=device, **_FEATURIZER_KWARGS)
+    featurizer = RNAGraphFeaturizer(**_FEATURIZER_KWARGS)
     featurized, raw = featurizer.featurize_from_pdb_file(str(pdb_path))
     featurized = featurized.to(device)
     n_nodes = len(raw["sequence"])

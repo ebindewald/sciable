@@ -42,7 +42,7 @@ def test_method_page_shows_example_choice(client):
 
 def test_method_page_shows_example_description_and_info(client):
     text = client.get("/methods/grnade").text
-    assert "synthetic 6-nucleotide" in text
+    assert "12-nucleotide RNA hairpin" in text
     assert "More about this example" in text
     assert "inverse folding" in text
 
