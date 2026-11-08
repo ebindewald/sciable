@@ -101,6 +101,13 @@ def _real_embedding(sequence: str, checkpoint: str) -> list[list[float]]:
     _log("importing fm (RNA-FM)")
     import fm
 
+    # PyTorch >=2.6 defaults torch.load(weights_only=True); the RNA-FM checkpoint pickles an
+    # argparse.Namespace (its `args`), which isn't an allowlisted global, so upstream's
+    # torch.load (fm/pretrained.py) raises. Allowlist that one class — safe here because the
+    # checkpoint is pinned + sha256-verified at build (a trusted source). This keeps
+    # weights_only=True's protection for every other global.
+    torch.serialization.add_safe_globals([argparse.Namespace])
+
     _log(f"loading RNA-FM from {checkpoint}")
     # Verified against the pinned commit (fm/pretrained.py): rna_fm_t12(path) takes the
     # LOCAL branch (os.path.exists) and loads with theme="rna" — NOT the bare
