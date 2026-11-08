@@ -1,0 +1,27 @@
+# RibonanzaNet-SS (RNA base-pairing matrix) Runpod Serverless worker dependencies.
+#
+# Upstream code (MIT): https://github.com/Shujun-He/RibonanzaNet — but the SS head is
+# published only as a Kaggle notebook. The fetchable, self-contained implementation is
+# the gRNAde copy (tools/ribonanzanet_sec_struct/network.py + config.yaml, chaitjo/gRNAde,
+# credits the original). worker/Dockerfile.ribonanzanet clones that at a pinned commit and
+# the runner imports RibonanzaNetSS from it.
+#
+# This is the VERIFIED module-level import surface of that network.py: yaml (pyyaml),
+# numpy, torch, einops — plus stdlib (math/os/typing/functools). We read the contact head
+# directly and NEVER call the model's .predict(), so arnie + scipy (needed only for the
+# Hungarian dot-bracket step) are deliberately NOT installed. No torch_geometric/scatter,
+# no folding binaries (EternaFold/X3DNA/ViennaRNA), no MSA.
+#
+# ⚠ torch is NOT pinned/listed: the image builds on
+# pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime (modern-GPU kernels, sm_50..sm_120).
+# Upstream's env.yml pins torch 2.1.2/py3.9, but the SS network code has no torch guard
+# (plain nn.Module + einsum/einops), so it should run on 2.7 — confirm on the first smoke run.
+
+runpod>=1.6
+
+einops
+numpy
+pyyaml
+
+# Used at build time to bake the checkpoint (hf_hub_download); harmless at runtime.
+huggingface_hub

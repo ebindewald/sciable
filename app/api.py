@@ -211,11 +211,15 @@ def contact_metrics(matrix: list[list[float]]) -> dict:
     }
 
 
-def render_contact_heatmap(sequence: str, matrix: list[list[float]]) -> str:
+def render_contact_heatmap(
+    sequence: str, matrix: list[list[float]], label: str = "contact map"
+) -> str:
     """Server-rendered L×L heatmap (sequential single-hue via cell opacity).
 
     Off-diagonal intensity reveals long-range / crossing (pseudoknot) signal that a
-    nested dot-bracket cannot represent. Returns '' if too large to render inline."""
+    nested dot-bracket cannot represent. ``label`` names the matrix for the SVG's
+    accessibility label (method-specific — e.g. "attention map" vs "base-pairing
+    probability matrix"). Returns '' if too large to render inline."""
     n = len(matrix)
     if n == 0 or n > _HEATMAP_MAX_L:
         return ""
@@ -242,7 +246,7 @@ def render_contact_heatmap(sequence: str, matrix: list[list[float]]) -> str:
     w = size + 2 * pad
     return (
         f'<svg class="contact-heatmap" viewBox="0 0 {w} {w}" width="{w}" height="{w}" '
-        f'role="img" aria-label="structRFM attention map, {n}x{n}">'
+        f'role="img" aria-label="{label}, {n}x{n}">'
         f'{"".join(cells)}{"".join(ticks)}</svg>'
     )
 

@@ -200,6 +200,7 @@ class RunService:
                 seed=validated.seed,
                 method_id=manifest.method_id,
                 output_kind=manifest.outputs.kind,
+                output_format=manifest.outputs.format or "",
                 inputs=validated.values,
                 endpoint_ref=dep["endpoint_ref"],
             )

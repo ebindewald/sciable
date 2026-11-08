@@ -125,9 +125,14 @@ def run_page(run_id: str, request: Request):
         sequence = outputs.get("sequence") or ""
         matrix = outputs.get("matrix") or []
         ctx["sequence"] = sequence
-        ctx["matrix_type"] = outputs.get("matrix_type")
+        matrix_type = outputs.get("matrix_type")
+        ctx["matrix_type"] = matrix_type
+        label = (
+            "base-pairing probability matrix" if matrix_type == "base_pairing"
+            else "attention map"
+        )
         ctx["contact_metrics"] = contact_metrics(matrix) if matrix else None
-        ctx["heatmap_svg"] = render_contact_heatmap(sequence, matrix) if matrix else ""
+        ctx["heatmap_svg"] = render_contact_heatmap(sequence, matrix, label) if matrix else ""
         ctx["matrix_len"] = len(matrix)
     elif succeeded and kind == "structure":
         structure = outputs.get("structure") or ""

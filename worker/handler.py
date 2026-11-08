@@ -32,6 +32,7 @@ RUNNERS = {
     "grnade": "run_grnade.py",
     "structrfm": "run_structrfm.py",
     "rhofold": "run_rhofold.py",
+    "ribonanzanet": "run_ribonanzanet.py",
 }
 # Must stay BELOW the Runpod endpoint's execution timeout (600 s by default), so a
 # stuck job comes back as a "timeout" error carrying the runner's last log lines

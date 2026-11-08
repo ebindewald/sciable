@@ -35,6 +35,11 @@ class JobSpec:
     output_kind: str
     inputs: dict[str, Any]
     endpoint_ref: str
+    #: Manifest ``outputs.format`` (e.g. "attention_matrix", "base_pairing_matrix") —
+    #: manifest-driven, like ``output_kind``; lets a backend label an output whose kind
+    #: is shared by several methods. Defaults to "" so direct JobSpec construction (tests)
+    #: need not set it.
+    output_format: str = ""
 
 
 class SubmitStatus(StrEnum):

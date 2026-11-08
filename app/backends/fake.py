@@ -100,6 +100,7 @@ class FakeBackend:
             "fingerprint": job.fingerprint,
             "method_id": job.method_id,
             "output_kind": job.output_kind,
+            "output_format": job.output_format,
             "inputs": dict(job.inputs),
         }
         return SubmitResult(status=SubmitStatus.ACCEPTED, provider_job_id=job_id)
@@ -140,17 +141,23 @@ class FakeBackend:
         if kind == "contact_map":
             sequence = str(inputs.get("sequence") or "")
             matrix = _contact_matrix(sequence)
+            # Label the matrix from the manifest's output format (method-agnostic):
+            # "attention_matrix" -> "attention" (structRFM), "base_pairing_matrix" ->
+            # "base_pairing" (RibonanzaNet). The results page keys its heading off this.
+            fmt = job.get("output_format") or "attention_matrix"
+            matrix_type = fmt.replace("_matrix", "")
             base_raw["job"]["length"] = len(sequence)
             base_raw["stdout"] = "\n".join(
                 [
                     "[stub-runner] loading sequence... ok",
-                    f"[stub-runner] extracting attention map for {len(sequence)} nt...",
+                    f"[stub-runner] extracting {matrix_type} matrix for {len(sequence)} nt...",
                     "[stub-runner] done.",
                 ]
             )
-            base_raw["report"] = {"stub": True, "format": "attention_matrix"}
+            base_raw["report"] = {"stub": True, "format": fmt}
             return (
-                {"sequence": sequence, "matrix": matrix, "matrix_type": "attention"},
+                {"sequence": sequence, "matrix": matrix, "matrix_type": matrix_type,
+                 "engine": "stub"},
                 base_raw,
             )
 

@@ -1,0 +1,43 @@
+{
+  "method_id": "ribonanzanet",
+  "version": "0.1.0-dev",
+  "title": "RibonanzaNet-SS — RNA base-pairing probability matrix",
+  "description": "Run RibonanzaNet-SS on a single RNA sequence and return its L×L base-pairing probability matrix (0..1) — the model's native contact-head output, parallel to structRFM's attention map. Off-diagonal probability hints at base pairs, including crossing/pseudoknot interactions. It is a model prediction, not an experimentally validated structure, and no pairing cutoff is calibrated.",
+  "citation": "He et al., RibonanzaNet (Ribonanza, Das lab). Code: https://github.com/Shujun-He/RibonanzaNet (MIT); SS head: kaggle.com/code/shujun717/ribonanzanet-2d-structure-inference",
+  "source_commit": "2453b18778a1981ac25f314790e5395f1e9ab218",
+  "checkpoint_digest": "sha256:626060952368affbf61b78b532d6166387094754b68bc0553da376f2d2b00d56",
+  "worker_image_digest": "PENDING-BUILD",
+  "provisional": true,
+  "runner": "run_ribonanzanet.py",
+  "inputs": {
+    "fields": [
+      {
+        "name": "sequence",
+        "type": "rna_sequence",
+        "required": true,
+        "label": "RNA sequence",
+        "help": "A single RNA sequence over A/C/G/U only (no N — the model has no unknown-base token).",
+        "max_length": 500
+      },
+      {
+        "name": "seed",
+        "type": "int",
+        "required": false,
+        "label": "Seed",
+        "help": "Prediction is deterministic; seed is accepted for reproducibility bookkeeping."
+      }
+    ]
+  },
+  "outputs": {
+    "kind": "contact_map",
+    "format": "base_pairing_matrix"
+  },
+  "limits": {
+    "job_timeout_s": 900,
+    "max_in_flight": 1
+  },
+  "example_ref": "methods/ribonanzanet/example/example.fasta",
+  "example_summary": "A tiny 12-nucleotide RNA hairpin (GGGGAAAACCCC), bundled so you can try the pipeline without supplying a sequence.",
+  "example_details": "A hand-picked minimal hairpin (GGGGAAAACCCC): four G-C pairs closing a four-base loop. It exercises the sequence -> base-pairing-matrix path end to end. Swap in any single RNA sequence over A/C/G/U (no N). Real inference returns RibonanzaNet-SS's L×L base-pairing probability matrix; the fake backend returns a deterministic placeholder matrix (engine=stub).",
+  "notes": "Output kind is `contact_map` (L×L base-pairing probability matrix, matrix_type=base_pairing), reusing the existing wired kind — parallel to structRFM's attention map. We expose the model's native contact-head sigmoid output and deliberately SKIP the dot-bracket conversion (which would need arnie.pk_predictors._hungarian + scipy); the raw probability matrix is simpler, dependency-light, and more faithful. ACGU-only input (the tokenizer KeyErrors on N), enforced by a per-method validator. The canonical SS head is a Kaggle notebook; the fetchable self-contained implementation (code + config.yaml + checkpoint ribonanzanet_ss.pt, ~45 MB) is the gRNAde copy (tools/ribonanzanet_sec_struct/, chaitjo/gRNAde on HF), which credits Shujun-He/RibonanzaNet. source_commit (gRNAde clone), checkpoint_digest, worker_image_digest and max_length stay provisional until a Runpod smoke run. The runner reports engine=ribonanzanet vs engine=stub; use_grad_checkpoint is patched off at inference. No MSA, no folding binaries, no arnie, no torch_geometric."
+}

@@ -1,0 +1,35 @@
+# Method card — the portable, shareable brief for a sciable method.
+# Authored by whoever wants the method; drop it in and run `/onlinify-method`.
+# Share it on GitHub so others can integrate the same method on THEIR Runpod.
+# This file is the human brief ONLY — no implementation/deployment specifics.
+# The agent's integration findings (gotchas, decisions, this-build notes) go in the
+# deploy doc: deploy-docs/RIBONANZANET_DEPLOY.md.
+
+slug: ribonanzanet
+name: RibonanzaNet-SS
+description: Predict RNA secondary structure (dot-bracket, pseudoknots supported) from a single RNA sequence.
+
+# Links: any list of URLs (code, papers, checkpoints, ...). A short trailing
+# comment per link (role, license, citation) is helpful but optional.
+# Two sources are listed on purpose — the canonical provenance, and the convenience
+# copy that is actually fetchable/self-contained; the integration may use either.
+links:
+  - https://github.com/Shujun-He/RibonanzaNet                                   # canonical code (MIT) — base reactivity model; SS head is NOT in this repo
+  - https://www.kaggle.com/code/shujun717/ribonanzanet-2d-structure-inference   # canonical SS head — published only as a Kaggle notebook
+  - https://huggingface.co/chaitjo/gRNAde                                       # convenience: self-contained SS impl (tools/ribonanzanet_sec_struct/) + checkpoint ribonanzanet_ss.pt (~45 MB), credits the original
+  - https://www.biorxiv.org/content/10.1101/2024.02.24.581671                   # paper: He et al., Ribonanza / RibonanzaNet (verify exact citation/DOI)
+
+tags: [RNA, secondary-structure, single-sequence, pseudoknots, deep-learning]
+
+notes-for-agent: >
+  Expose the secondary-structure head: input one RNA sequence over A/C/G/U (ACGU only —
+  the tokenizer has no N/unknown token), output a dot-bracket structure, reusing the
+  EXISTING `structure` output kind. Single-sequence, no MSA, no folding binaries
+  (EternaFold/X3DNA/ViennaRNA) — so job isolation holds. The model itself returns an L×L
+  base-pairing probability matrix; the dot-bracket is a post-processing step via arnie's
+  Hungarian parser (arnie.pk_predictors._hungarian, theta=0.5) — so arnie + scipy are
+  required deps. Tiny model (~45 MB checkpoint). The canonical SS head lives only in a
+  Kaggle notebook; the fetchable, self-contained implementation is the gRNAde copy
+  (tools/ribonanzanet_sec_struct/network.py + config.yaml), which credits the original —
+  source the code/config/checkpoint from there, cite Shujun-He/RibonanzaNet as canonical.
+  Frame the dot-bracket as a model prediction, not an experimentally validated structure.

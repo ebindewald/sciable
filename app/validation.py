@@ -232,8 +232,22 @@ def _validate_grnade(manifest: Manifest, values: dict[str, Any]) -> None:
     values["sequence_length"] = seq_len
 
 
+def _validate_ribonanzanet(manifest: Manifest, values: dict[str, Any]) -> None:
+    """RibonanzaNet-SS's tokenizer is hardcoded to A/C/G/U (no unknown-base token), so
+    an N that the generic RNA alphabet allows would KeyError at inference. Reject it at
+    submit with a clear message instead of a worker crash."""
+    seq = values.get("sequence") or ""
+    bad = set(seq) - set("ACGU")
+    if bad:
+        raise ValidationError(
+            "unsupported_base",
+            f"RibonanzaNet-SS supports only A/C/G/U (no {sorted(bad)}).",
+        )
+
+
 _METHOD_VALIDATORS: dict[str, Callable[[Manifest, dict[str, Any]], None]] = {
     "grnade": _validate_grnade,
+    "ribonanzanet": _validate_ribonanzanet,
 }
 
 

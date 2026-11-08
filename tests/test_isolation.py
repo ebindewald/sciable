@@ -116,7 +116,24 @@ def test_rhofold_runner_produces_pdb(tmp_path, monkeypatch):
     assert result.runner_report["residues"] == len(seq)
 
 
-@pytest.mark.parametrize("method", ["rhofold", "structrfm", "grnade"])
+def test_ribonanzanet_runner_produces_matrix(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
+    result = run_job(
+        {"method": "ribonanzanet", "inputs": {"sequence": "GGGGAAAACCCC"}},
+        base_dir=tmp_path,
+        cleanup=False,
+    )
+    out = result.outputs
+    assert out["sequence"] == "GGGGAAAACCCC"
+    assert out["matrix_type"] == "base_pairing"
+    assert out["engine"] == "stub"  # no checkpoint in CI
+    m = out["matrix"]
+    assert len(m) == 12 and all(len(row) == 12 for row in m)
+    assert all(0.0 <= v <= 1.0 for row in m for v in row)
+    assert m == [list(r) for r in zip(*m, strict=True)]  # symmetric
+
+
+@pytest.mark.parametrize("method", ["rhofold", "structrfm", "grnade", "ribonanzanet"])
 def test_missing_checkpoint_fails_without_stub_opt_in(tmp_path, monkeypatch, method):
     """No checkpoint + no explicit stub opt-in = a loud failure, never a fake
     success. (A misrouted job on the wrong image was twice reported 'succeeded'
