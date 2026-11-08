@@ -127,6 +127,8 @@ def _real_matrix(sequence: str, checkpoint: str, work: Path) -> list[list[float]
     if repo not in sys.path:
         sys.path.insert(0, repo)
 
+    import contextlib  # noqa: PLC0415
+
     import torch  # noqa: PLC0415
     from tools.ribonanzanet_sec_struct.network import RibonanzaNetSS  # noqa: PLC0415
 
@@ -136,11 +138,15 @@ def _real_matrix(sequence: str, checkpoint: str, work: Path) -> list[list[float]
     # __init__ reads the YAML + checkpoint and writes an arnie_file.txt into the CWD
     # (the handler makes CWD a private, writable per-job dir). We never call .predict()
     # (which would import arnie) — we read the contact head directly.
-    model = RibonanzaNetSS(
-        config_filepath=cfg_path, checkpoint_filepath=checkpoint, device=str(device)
-    )
-    model = model.to(device)
-    model.eval()
+    # Upstream __init__ prints "Loading ... checkpoint: <path>" to stdout; redirect that
+    # to stderr so the baked checkpoint PATH never lands in the returned stdout/raw
+    # (stdout carries only our path-free JSON report; paths are internal plumbing).
+    with contextlib.redirect_stdout(sys.stderr):
+        model = RibonanzaNetSS(
+            config_filepath=cfg_path, checkpoint_filepath=checkpoint, device=str(device)
+        )
+        model = model.to(device)
+        model.eval()
 
     tokens = getattr(model, "tokens", {"A": 0, "C": 1, "G": 2, "U": 3})
     try:

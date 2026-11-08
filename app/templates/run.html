@@ -60,6 +60,10 @@
     <p class="muted"><strong>Real gRNAde designs.</strong> Candidate sequences for the
        supplied backbone — a successful run does not validate folding or biological
        function.</p>
+    {% elif engine == "ribonanzanet" %}
+    <p class="muted"><strong>Real RibonanzaNet-SS output.</strong> A base-pairing
+       probability matrix — a model prediction, not an experimentally validated structure,
+       and no pairing cutoff is calibrated.</p>
     {% elif engine == "stub" or manifest.provisional %}
     <p class="warn"><strong>⚠ Mockup output:</strong> a deterministic placeholder (demo
        backend), not a real {{ manifest.method_id }} result — it depends only on input size.</p>

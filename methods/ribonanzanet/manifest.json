@@ -7,7 +7,7 @@
   "source_commit": "2453b18778a1981ac25f314790e5395f1e9ab218",
   "checkpoint_digest": "sha256:626060952368affbf61b78b532d6166387094754b68bc0553da376f2d2b00d56",
   "worker_image_digest": "PENDING-BUILD",
-  "provisional": true,
+  "provisional": false,
   "runner": "run_ribonanzanet.py",
   "inputs": {
     "fields": [
