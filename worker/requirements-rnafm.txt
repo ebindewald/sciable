@@ -1,16 +1,19 @@
 # RNA-FM (per-residue embeddings) Runpod Serverless worker dependencies.
 #
 # Upstream code (MIT): https://github.com/ml4bio/RNA-FM — the pip/importable package is
-# `rna-fm` (imported as `fm`). worker/Dockerfile.rnafm installs it pinned-by-commit
-# (pip install "git+https://github.com/ml4bio/RNA-FM@<commit>"), which also pulls the
-# package's own install_requires: numpy, pandas, tqdm, scikit-learn, ptflops.
+# `rna-fm` (imported as `fm`). We install the pinned PyPI RELEASE, NOT from git.
 #
-# ⚠ VERIFIED module-level import surface (scanned 2026-11-08 at commit 348951516):
-#   `import fm` runs fm/__init__.py -> `from .downstream import *` -> baseline.py, which
-#   has an UNCONDITIONAL `from ptflops import get_model_complexity_info`. So ptflops is
-#   required just to import the package, even though we never use it. (apex is guarded by
-#   try/except; torchvision.datasets is only imported inside a function — neither needed.)
-#   These all arrive via the rna-fm install_requires, so nothing extra is listed here.
+# ⚠ Why PyPI, not git: the repo's setup.py does `open("README_backup.md")`, but that file
+# is NOT in the repo — so `pip install git+https://github.com/ml4bio/RNA-FM@<commit>` dies
+# during metadata generation (this is what failed the first Runpod build, 2026-11-08). The
+# PyPI release ships a py3-none-any WHEEL, which pip installs WITHOUT running setup.py, so
+# the bug can't fire. rna-fm==0.2.2 is an immutable, reproducible pin.
+#
+# rna-fm pulls its own install_requires: numpy, pandas, tqdm, scikit-learn, ptflops.
+# ⚠ ptflops is load-bearing: `import fm` runs fm/__init__.py -> `from .downstream import *`
+#   -> baseline.py, which has an UNCONDITIONAL `from ptflops import ...`. We never use it,
+#   but the package won't import without it. (apex is try/except-guarded; torchvision is
+#   only imported inside a function — neither needed.)
 #
 # ⚠ torch is NOT pinned/listed: the image builds on
 # pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime (modern-GPU kernels, sm_50..sm_120).
@@ -19,6 +22,8 @@
 # install_requires does NOT list torch, so pip will not replace the base image's build.
 
 runpod>=1.6
+
+rna-fm==0.2.2
 
 # Used at build time to bake the checkpoint (hf_hub_download); harmless at runtime.
 huggingface_hub

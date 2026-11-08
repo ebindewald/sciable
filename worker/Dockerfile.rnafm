@@ -9,13 +9,16 @@
 # the only supported deploy path; see docs/ENDPOINT_SETUP.md ("What NOT to do").
 #
 # Provenance: ml4bio/RNA-FM (MIT code). The pip package is `rna-fm` (imported as `fm`);
-# this image installs it pinned by commit and bakes the ~1.19 GB RNA-FM_pretrained.pth
-# checkpoint from HF cuhkaih/rnafm. Personal/BYOK use, private registry — nothing public.
+# this image installs the pinned PyPI release (see requirements-rnafm.txt) and bakes the
+# ~1.19 GB RNA-FM_pretrained.pth checkpoint from HF cuhkaih/rnafm. Personal/BYOK use,
+# private registry — nothing public.
 # ⚠ Verify the WEIGHTS redistribution terms before publishing any image.
+# ⚠ Install is from PyPI (rna-fm==0.2.2), NOT git: the repo's setup.py reads a
+#   README_backup.md that isn't in the tree, so `pip install git+…` fails (it broke the
+#   first build, 2026-11-08). The PyPI wheel installs without running setup.py.
 #
 # Build (GPU hosts are linux/amd64):
 #   docker build --platform linux/amd64 -f worker/Dockerfile.rnafm \
-#     --build-arg RNAFM_COMMIT=<full-sha> \
 #     --build-arg RNAFM_CKPT_SHA256=<sha256> \
 #     -t <registry>/rnafm-worker:<tag> .
 
@@ -24,8 +27,6 @@
 # (covers sm_50..sm_120). ⚠ torch-2.7 compat confirmed only on a smoke run.
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 
-# Pinned upstream commit (verified 2026-11-08 from GitHub main; build-unverified).
-ARG RNAFM_COMMIT=348951516e0963d22bbb33b3c9fc18c89081d38e
 # Checkpoint pinned (verified 2026-11-08): HF LFS oid (=sha256) of RNA-FM_pretrained.pth.
 # File = 1,194,424,423 bytes. CKPT_REV pins the HF repo revision.
 ARG RNAFM_CKPT_SHA256=5b5d7d87b37c291ef42c140ef9edf7aea29f255fa2a4fd435f776c52e93d5e99
@@ -44,13 +45,13 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /opt/worker
 
 RUN apt-get update --allow-releaseinfo-change \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install RNA-FM pinned by commit — this also pulls its install_requires
-# (numpy, pandas, tqdm, scikit-learn, ptflops). torch is NOT in install_requires, so the
-# base image's CUDA build is preserved. Then the worker's own build/runtime deps.
-RUN pip install --no-cache-dir "git+https://github.com/ml4bio/RNA-FM@${RNAFM_COMMIT}"
+# Install rna-fm (pinned PyPI wheel) + the worker's build/runtime deps. rna-fm pulls its
+# own install_requires (numpy, pandas, tqdm, scikit-learn, ptflops); torch is NOT among
+# them, so the base image's CUDA build is preserved. See requirements-rnafm.txt for why
+# this is PyPI and not a git install.
 COPY worker/requirements-rnafm.txt ./worker/requirements-rnafm.txt
 RUN pip install --no-cache-dir -r worker/requirements-rnafm.txt
 
