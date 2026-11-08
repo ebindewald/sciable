@@ -64,11 +64,41 @@
     <p class="muted"><strong>Real RibonanzaNet-SS output.</strong> A base-pairing
        probability matrix — a model prediction, not an experimentally validated structure,
        and no pairing cutoff is calibrated.</p>
+    {% elif engine == "rnafm" %}
+    <p class="muted"><strong>Real RNA-FM output.</strong> Per-residue embeddings — learned
+       features for downstream models, not a structure and not a biological prediction.</p>
     {% elif engine == "stub" or manifest.provisional %}
     <p class="warn"><strong>⚠ Mockup output:</strong> a deterministic placeholder (demo
        backend), not a real {{ manifest.method_id }} result — it depends only on input size.</p>
     {% endif %}
-    {% if kind == "contact_map" %}
+    {% if kind == "embedding" %}
+      <h2>RNA-FM per-residue embeddings</h2>
+      <p class="muted">An L×{{ embedding_dim }} matrix — one {{ embedding_dim }}-dim vector
+         per nucleotide. These are <strong>learned features</strong>, meaningful only
+         relative to a downstream model trained on them — not a structure, not a calibrated
+         prediction. The full numeric matrix (and the mean-pooled vector) is served via
+         <a href="/api/runs/{{ run.id }}">the API</a>.</p>
+      {% if embedding_heatmap_svg %}
+      <div class="rna-structure-wrap">{{ embedding_heatmap_svg | safe }}</div>
+      <p class="muted">Heatmap of the embedding matrix (rows = residues, columns = dimensions),
+         downsampled and min-max normalized for display. Darker = larger value.</p>
+      {% endif %}
+      {% if embedding_metrics %}
+      <table>
+        <tr><td>Length</td><td>{{ embedding_metrics.length }} nt</td></tr>
+        <tr><td>Embedding dim</td><td>{{ embedding_metrics.dim }}</td></tr>
+        <tr><td>Value range</td><td>{{ embedding_metrics.min }} … {{ embedding_metrics.max }}</td></tr>
+        <tr><td>Mean</td><td>{{ embedding_metrics.mean }}</td></tr>
+        <tr><td>Mean per-residue L2 norm</td><td>{{ embedding_metrics.norm_mean }}</td></tr>
+      </table>
+      {% endif %}
+      {% if pooled_preview %}
+      <details>
+        <summary>Mean-pooled sequence vector ({{ pooled_len }}-dim) — first 8 values</summary>
+        <pre class="structure">{{ pooled_preview | join(", ") }} …</pre>
+      </details>
+      {% endif %}
+    {% elif kind == "contact_map" %}
       {% if matrix_type == "base_pairing" %}
       <h2>RNA base-pairing probability matrix</h2>
       <p class="muted">L×L base-pairing probabilities. Off-diagonal intensity hints at

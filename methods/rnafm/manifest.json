@@ -1,0 +1,44 @@
+{
+  "method_id": "rnafm",
+  "version": "0.1.0-dev",
+  "title": "RNA-FM — RNA foundation-model embeddings",
+  "description": "Run the RNA-FM foundation model on a single RNA sequence and return its per-nucleotide embeddings: an L×640 feature matrix (one 640-dim vector per base), plus a mean-pooled 640-dim sequence vector. These are learned features for downstream models, not a biological prediction or a structure.",
+  "citation": "Chen et al., Interpretable RNA Foundation Model from Unannotated Data for Highly Accurate RNA Structure and Function Predictions. arXiv:2204.00300 (2022); Nature Methods (2024). https://github.com/ml4bio/RNA-FM",
+  "source_commit": "PENDING-PIN",
+  "checkpoint_digest": "PENDING-PIN",
+  "worker_image_digest": "PENDING-BUILD",
+  "provisional": true,
+  "runner": "run_rnafm.py",
+  "inputs": {
+    "fields": [
+      {
+        "name": "sequence",
+        "type": "rna_sequence",
+        "required": true,
+        "label": "RNA sequence",
+        "help": "A single RNA sequence over A/C/G/U (N allowed for unknown positions).",
+        "max_length": 500
+      },
+      {
+        "name": "seed",
+        "type": "int",
+        "required": false,
+        "label": "Seed",
+        "help": "Embedding extraction is deterministic; seed is accepted for reproducibility bookkeeping."
+      }
+    ]
+  },
+  "outputs": {
+    "kind": "embedding",
+    "format": "rnafm_embedding"
+  },
+  "limits": {
+    "job_timeout_s": 900,
+    "max_in_flight": 1,
+    "max_sequence_length": 500
+  },
+  "example_ref": "methods/rnafm/example/example.fasta",
+  "example_summary": "A tiny 14-nucleotide RNA hairpin (GGCACUUCGGUGCC), bundled so you can try the pipeline without supplying a sequence.",
+  "example_details": "A small hairpin (GGCACUUCGGUGCC). It exercises the sequence -> embedding path end to end. Swap in any single RNA sequence over A/C/G/U. Real inference returns RNA-FM's per-residue embeddings (an L×640 matrix) plus a mean-pooled 640-vector; the stub returns a deterministic, obviously-synthetic placeholder matrix (engine=stub) that depends only on position, not on the sequence.",
+  "notes": "Real inference uses the ncRNA model RNA-FM (12-layer BERT encoder, 640-dim embeddings, ~100M params; pretrained by masked-token prediction on ~23.7M ncRNA from RNAcentral) — NOT the sibling mRNA-FM (1280-dim, codon tokenizer). Output is the per-residue embedding matrix (L×640) plus a mean-pooled 640-vector; these are LEARNED FEATURES, meaningful only relative to a downstream model trained on them — not a structure, not a biological prediction. Downstream heads (secondary structure, family classification, interaction prediction) each need a separate trained head and are out of scope for v1. source_commit, checkpoint_digest, worker_image_digest and max_sequence_length stay provisional until confirmed by a Runpod smoke run. The runner reports engine=rnafm vs engine=stub. Code is MIT (ml4bio/RNA-FM); verify the WEIGHTS redistribution terms separately before baking the checkpoint. The exact Nature Methods DOI must be verified before publishing (do NOT reuse RhoFold's 10.1038/s41592-024-02487-0 — same lab, different paper)."
+}

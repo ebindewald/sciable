@@ -139,7 +139,31 @@ def test_ribonanzanet_runner_produces_matrix(tmp_path, monkeypatch):
     assert "unvalidated" in result.runner_report["reactivity_note"]
 
 
-@pytest.mark.parametrize("method", ["rhofold", "structrfm", "grnade", "ribonanzanet"])
+def test_rnafm_runner_produces_embedding(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCIABLE_ALLOW_STUB", "1")  # no checkpoint in CI
+    seq = "GGCACUUCGGUGCC"
+    result = run_job(
+        {"method": "rnafm", "inputs": {"sequence": seq}},
+        base_dir=tmp_path,
+        cleanup=False,
+    )
+    out = result.outputs
+    assert out["sequence"] == seq
+    assert out["engine"] == "stub"  # no checkpoint in CI
+    assert out["embedding_dim"] == 640
+    emb = out["embedding"]
+    assert len(emb) == len(seq) and all(len(row) == 640 for row in emb)
+    assert all(-1.0 <= v <= 1.0 for row in emb for v in row)
+    assert len(out["pooled"]) == 640
+    assert result.runner_report["dim"] == 640
+    # The runner stub must be byte-identical to the fake backend's placeholder.
+    from app.backends.fake import _embedding, _mean_pool
+
+    assert emb == _embedding(seq)
+    assert out["pooled"] == _mean_pool(emb)
+
+
+@pytest.mark.parametrize("method", ["rhofold", "structrfm", "grnade", "ribonanzanet", "rnafm"])
 def test_missing_checkpoint_fails_without_stub_opt_in(tmp_path, monkeypatch, method):
     """No checkpoint + no explicit stub opt-in = a loud failure, never a fake
     success. (A misrouted job on the wrong image was twice reported 'succeeded'

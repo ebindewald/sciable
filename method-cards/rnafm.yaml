@@ -1,0 +1,43 @@
+# Method card — the portable, shareable brief for a sciable method.
+# Authored by whoever wants the method; drop it in and run `/onlinify-method`.
+# Share it on GitHub so others can integrate the same method on THEIR Runpod.
+# This file is the human brief ONLY — no implementation/deployment specifics.
+# The agent's integration findings (gotchas, decisions, this-build notes) go in the
+# deploy doc: deploy-docs/RNAFM_DEPLOY.md.
+
+slug: rnafm
+name: RNA-FM
+description: Compute per-nucleotide embeddings (an L×640 feature matrix) for a single RNA sequence with the RNA-FM foundation model.
+
+# Links: any list of URLs (code, papers, checkpoints, ...). A short trailing
+# comment per link (role, license, citation) is helpful but optional.
+links:
+  - https://github.com/ml4bio/RNA-FM             # code (MIT) — RNA-FM foundation model (same lab as RhoFold)
+  - https://arxiv.org/abs/2204.00300             # paper: Chen et al., "Interpretable RNA Foundation Model from Unannotated Data..." (2022); later in Nature Methods 2024 — verify exact DOI (do NOT reuse RhoFold's 10.1038/s41592-024-02487-0)
+  - https://huggingface.co/cuhkaih/rnafm         # checkpoints: RNA-FM .pth files (place in pretrained/)
+
+tags: [RNA, foundation-model, embeddings, single-sequence, language-model]
+
+notes-for-agent: >
+  This method proves the new EMBEDDING / array output kind — the first method whose
+  primary artifact is a numeric matrix, not a sequence or a structure. Build that output
+  kind here: input one RNA sequence over A/C/G/U, output the per-residue embedding matrix
+  of shape L×640 (12-layer BERT encoder, 640-dim, ~100M params, pretrained by masked-token
+  prediction on ~23.7M ncRNA from RNAcentral). Also surface a mean-pooled sequence-level
+  640-vector as a convenience. The full L×640 matrix is large — serve it as a downloadable
+  artifact (e.g. .npy/.csv) rather than dumping numbers on the page; on the result page show
+  shape + a compact visualization (e.g. a downsampled heatmap of the embedding matrix), not
+  raw floats. Single-sequence, no MSA, no external binaries — job isolation holds. Tiny/fast
+  on 24 GB.
+
+  Framing: embeddings are LEARNED FEATURES, meaningful only relative to a downstream model
+  trained on them — not a biological prediction and not a structure. Say so plainly; expose
+  no score whose direction/meaning can't be explained. RNA-FM is a feature extractor: tasks
+  like secondary structure, family classification, or RNA-protein interaction each need a
+  separate trained head that this v1 does NOT ship — out of scope for the first endpoint.
+
+  Pin one upstream commit and ONE checkpoint, pre-baked + checksummed (don't rely on runtime
+  download). Use the ncRNA model RNA-FM (640-dim) for v1 — keep it distinct from the sibling
+  mRNA-FM (1280-dim, ~239M, codon tokenization over coding sequences); different alphabet and
+  tokenizer, so do not mix them. Validate against upstream on a fixed sequence/seed: embedding
+  shape (L×640), and numeric closeness of the embedding matrix within a documented tolerance.

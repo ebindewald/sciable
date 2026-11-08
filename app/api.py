@@ -251,6 +251,80 @@ def render_contact_heatmap(
     )
 
 
+def embedding_metrics(embedding: list[list[float]]) -> dict:
+    """Summary of an L×D per-residue embedding matrix."""
+    length = len(embedding)
+    dim = len(embedding[0]) if length else 0
+    flat = [v for row in embedding for v in row]
+    norms = [sum(v * v for v in row) ** 0.5 for row in embedding]
+    return {
+        "length": length,
+        "dim": dim,
+        "min": round(min(flat), 4) if flat else 0.0,
+        "max": round(max(flat), 4) if flat else 0.0,
+        "mean": round(sum(flat) / len(flat), 4) if flat else 0.0,
+        # Mean L2 norm of the per-residue vectors (a coarse "how big are the vectors").
+        "norm_mean": round(sum(norms) / len(norms), 4) if norms else 0.0,
+    }
+
+
+#: Inline embedding heatmap is downsampled to at most this many rows/cols of cells.
+_EMBED_HEATMAP_ROWS = 120
+_EMBED_HEATMAP_COLS = 96
+
+
+def render_embedding_heatmap(embedding: list[list[float]]) -> str:
+    """Server-rendered heatmap of an L×D embedding (rows = residues, cols = dims).
+
+    Block-averaged down to at most _EMBED_HEATMAP_ROWS×_EMBED_HEATMAP_COLS cells and
+    min-max normalized to 0..1 for display (embeddings carry negative values). This is
+    a visual summary only — the full numeric matrix is served via the API. Returns ''
+    for an empty matrix."""
+    rows = len(embedding)
+    cols = len(embedding[0]) if rows else 0
+    if rows == 0 or cols == 0:
+        return ""
+    out_rows = min(rows, _EMBED_HEATMAP_ROWS)
+    out_cols = min(cols, _EMBED_HEATMAP_COLS)
+    # Block-average source cells into the display grid.
+    grid: list[list[float]] = [[0.0] * out_cols for _ in range(out_rows)]
+    for r in range(out_rows):
+        r0 = r * rows // out_rows
+        r1 = max(r0 + 1, (r + 1) * rows // out_rows)
+        for c in range(out_cols):
+            c0 = c * cols // out_cols
+            c1 = max(c0 + 1, (c + 1) * cols // out_cols)
+            total = 0.0
+            count = 0
+            for i in range(r0, r1):
+                row = embedding[i]
+                for j in range(c0, c1):
+                    total += row[j]
+                    count += 1
+            grid[r][c] = total / count if count else 0.0
+    flat = [v for row in grid for v in row]
+    lo, hi = min(flat), max(flat)
+    span = hi - lo
+    cell_w = max(3, min(10, 480 // out_cols))
+    cell_h = max(3, min(14, 360 // out_rows))
+    pad = 2
+    w = out_cols * cell_w + 2 * pad
+    h = out_rows * cell_h + 2 * pad
+    cells: list[str] = []
+    for r, row in enumerate(grid):
+        for c, v in enumerate(row):
+            norm = (v - lo) / span if span else 0.0
+            cells.append(
+                f'<rect class="hm-cell" x="{pad + c * cell_w}" y="{pad + r * cell_h}" '
+                f'width="{cell_w}" height="{cell_h}" fill-opacity="{norm:.3f}"/>'
+            )
+    return (
+        f'<svg class="embedding-heatmap" viewBox="0 0 {w} {h}" width="{w}" height="{h}" '
+        f'role="img" aria-label="RNA-FM embedding heatmap, {rows} residues x {cols} dims">'
+        f'{"".join(cells)}</svg>'
+    )
+
+
 def _public_inputs(run: Run, manifest: Manifest) -> dict:
     """Input values safe to echo back (large structure text replaced by size)."""
     pub: dict[str, Any] = {}
@@ -292,6 +366,13 @@ def serialize_run(run: Run, manifest: Manifest) -> dict:
             body["matrix_type"] = outputs.get("matrix_type")
             if outputs.get("matrix"):
                 body["metrics"] = contact_metrics(outputs["matrix"])
+        elif kind == "embedding":
+            body["sequence"] = outputs.get("sequence")
+            body["embedding"] = outputs.get("embedding")
+            body["embedding_dim"] = outputs.get("embedding_dim")
+            body["pooled"] = outputs.get("pooled")
+            if outputs.get("embedding"):
+                body["metrics"] = embedding_metrics(outputs["embedding"])
         elif kind == "structure":
             body["structure"] = outputs.get("structure")
             body["sequence"] = outputs.get("sequence")

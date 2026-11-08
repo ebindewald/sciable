@@ -30,8 +30,10 @@ METHODS_DIR = REPO_ROOT / "methods"
 #: Input field types the generic validator and the form renderer understand.
 FIELD_TYPES = {"rna_sequence", "pdb_structure", "text", "int"}
 #: Output kinds the storage + results views understand.
-#: ``structure`` is a 2D dot-bracket; ``structure_3d`` is predicted 3D coordinates (PDB).
-OUTPUT_KINDS = {"sequences", "structure", "structure_3d", "contact_map"}
+#: ``structure`` is a 2D dot-bracket; ``structure_3d`` is predicted 3D coordinates (PDB);
+#: ``contact_map`` is an L×L matrix; ``embedding`` is an L×D feature matrix (learned
+#: per-residue vectors, e.g. RNA-FM's 640-dim embeddings — not a prediction).
+OUTPUT_KINDS = {"sequences", "structure", "structure_3d", "contact_map", "embedding"}
 
 
 class FieldSpec(BaseModel):

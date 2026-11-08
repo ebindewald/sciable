@@ -56,6 +56,34 @@ def _contact_matrix(sequence: str) -> list[list[float]]:
     return mat
 
 
+#: RNA-FM per-residue embedding width (the real ncRNA model is 640-dim).
+STUB_EMBED_DIM = 640
+
+
+def _embedding(sequence: str) -> list[list[float]]:
+    """Deliberately DUMB placeholder L×640 embedding — NOT real RNA-FM features.
+    Each value depends only on the (position, dim) indices (a regular moiré band in
+    [-1,1]), so two different sequences of the same length get BYTE-IDENTICAL output:
+    a dead giveaway that this is a stub, since real RNA-FM embeddings are
+    sequence-specific. The sequence is used only for its length. Kept byte-identical
+    to worker.run_rnafm._stub_embedding."""
+    n = len(sequence)
+    return [
+        [round(((i * 7 + d * 13) % 101) / 100.0 * 2 - 1, 4) for d in range(STUB_EMBED_DIM)]
+        for i in range(n)
+    ]
+
+
+def _mean_pool(embedding: list[list[float]]) -> list[float]:
+    """Mean-pool an L×D embedding to a single D-vector. Shared shape between the
+    stub and real paths; kept byte-identical to worker.run_rnafm._mean_pool."""
+    if not embedding:
+        return []
+    n = len(embedding)
+    d = len(embedding[0])
+    return [round(sum(row[j] for row in embedding) / n, 4) for j in range(d)]
+
+
 def _pdb(sequence: str) -> tuple[str, list[float]]:
     """Deterministic placeholder PDB — one P atom per nucleotide along a straight
     line, with an input-derived per-residue pLDDT (40-95) in the B-factor column.
@@ -158,6 +186,27 @@ class FakeBackend:
             return (
                 {"sequence": sequence, "matrix": matrix, "matrix_type": matrix_type,
                  "engine": "stub"},
+                base_raw,
+            )
+
+        if kind == "embedding":
+            sequence = str(inputs.get("sequence") or "")
+            embedding = _embedding(sequence)
+            pooled = _mean_pool(embedding)
+            dim = len(embedding[0]) if embedding else STUB_EMBED_DIM
+            base_raw["job"]["length"] = len(sequence)
+            base_raw["stdout"] = "\n".join(
+                [
+                    "[stub-runner] loading sequence... ok",
+                    f"[stub-runner] extracting embeddings for {len(sequence)} nt "
+                    f"({dim}-dim)...",
+                    "[stub-runner] done.",
+                ]
+            )
+            base_raw["report"] = {"stub": True, "format": "rnafm_embedding", "dim": dim}
+            return (
+                {"sequence": sequence, "embedding": embedding, "embedding_dim": dim,
+                 "pooled": pooled, "engine": "stub"},
                 base_raw,
             )
 

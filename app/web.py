@@ -17,10 +17,12 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from app.api import (
     _primary_input_field,
     contact_metrics,
+    embedding_metrics,
     manifest_for_run,
     read_outputs,
     read_raw_output,
     render_contact_heatmap,
+    render_embedding_heatmap,
     render_structure_svg,
     resolve_method,
     sequence_metrics,
@@ -134,6 +136,17 @@ def run_page(run_id: str, request: Request):
         ctx["contact_metrics"] = contact_metrics(matrix) if matrix else None
         ctx["heatmap_svg"] = render_contact_heatmap(sequence, matrix, label) if matrix else ""
         ctx["matrix_len"] = len(matrix)
+    elif succeeded and kind == "embedding":
+        sequence = outputs.get("sequence") or ""
+        embedding = outputs.get("embedding") or []
+        ctx["sequence"] = sequence
+        ctx["embedding_dim"] = outputs.get("embedding_dim")
+        ctx["embedding_metrics"] = embedding_metrics(embedding) if embedding else None
+        ctx["embedding_heatmap_svg"] = render_embedding_heatmap(embedding) if embedding else ""
+        # A short preview of the mean-pooled vector (full vector is in the API JSON).
+        pooled = outputs.get("pooled") or []
+        ctx["pooled_preview"] = pooled[:8]
+        ctx["pooled_len"] = len(pooled)
     elif succeeded and kind == "structure":
         structure = outputs.get("structure") or ""
         sequence = outputs.get("sequence") or ""
