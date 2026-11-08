@@ -131,6 +131,12 @@ def test_ribonanzanet_runner_produces_matrix(tmp_path, monkeypatch):
     assert len(m) == 12 and all(len(row) == 12 for row in m)
     assert all(0.0 <= v <= 1.0 for row in m for v in row)
     assert m == [list(r) for r in zip(*m, strict=True)]  # symmetric
+    # Auxiliary reactivity lives in the REPORT only (raw output), never in out.json —
+    # out.json must stay byte-identical to the fake backend's contact_map placeholder.
+    assert "reactivity" not in out
+    react = result.runner_report["reactivity"]
+    assert react == [float(i % 2) for i in range(12)]  # degenerate 0/1 sawtooth stub
+    assert "unvalidated" in result.runner_report["reactivity_note"]
 
 
 @pytest.mark.parametrize("method", ["rhofold", "structrfm", "grnade", "ribonanzanet"])

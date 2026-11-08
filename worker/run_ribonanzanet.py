@@ -32,6 +32,15 @@ Real-path config (all baked into the GPU worker image):
 I/O contract (shared by every runner):
     --input <input.json>   {"sequence": ..., "seed": ...}
     --out   <out.json>     {"sequence", "matrix" (LxL, 0..1), "matrix_type", "engine"}
+
+Auxiliary readout: the forward pass needed for the contact head ALSO produces the base
+model's per-nucleotide chemical-reactivity prediction (RibonanzaNetSS inherits forward()
+from RibonanzaNet, whose decoder emits it); we previously discarded it. It is reported in
+the stdout JSON report only (-> run raw output), NOT in out.json — the method's declared
+output stays the matrix, and the out.json artifact stays byte-identical to the fake
+backend's placeholder. Caveat: these decoder weights come from the SS-finetuned
+checkpoint, so the reactivity scale is unvalidated until checked against known
+loop-high/stem-low patterns (see reactivity_note in the report).
 """
 
 from __future__ import annotations
@@ -68,6 +77,11 @@ def _stub_matrix(sequence: str) -> list[list[float]]:
             v = round(h / 255, 4)
             mat[i][j] = mat[j][i] = v
     return mat
+
+
+def _stub_reactivity(sequence: str) -> list[float]:
+    """Unmistakably degenerate placeholder: a 0/1 sawtooth, never a plausible profile."""
+    return [float(i % 2) for i in range(len(sequence))]
 
 
 def _check_gpu(device: str) -> None:
@@ -111,10 +125,14 @@ def _patched_config(src_config: str, work: Path) -> str:
     return str(out)
 
 
-def _real_matrix(sequence: str, checkpoint: str, work: Path) -> list[list[float]]:
-    """Run RibonanzaNet-SS's forward pass and return the L×L base-pairing probability
-    matrix (the contact head's sigmoid output), symmetrized. Mirrors the model's own
-    ``predict`` matrix step but skips its arnie/Hungarian dot-bracket post-processing."""
+def _real_matrix(
+    sequence: str, checkpoint: str, work: Path
+) -> tuple[list[list[float]], list[float]]:
+    """Run RibonanzaNet-SS's forward pass and return (matrix, reactivity): the L×L
+    base-pairing probability matrix (the contact head's sigmoid output, symmetrized)
+    plus the per-nucleotide reactivity the inherited base forward() returns anyway.
+    Mirrors the model's own ``predict`` matrix step but skips its arnie/Hungarian
+    dot-bracket post-processing."""
     repo = os.environ.get("RIBONANZANET_REPO")
     if not repo or not Path(repo).exists():
         raise RealInferenceError(f"RIBONANZANET_REPO not set or missing (got {repo!r}).")
@@ -158,7 +176,7 @@ def _real_matrix(sequence: str, checkpoint: str, work: Path) -> list[list[float]
     with torch.no_grad():
         seq_t = torch.tensor(ids).int().unsqueeze(0).to(device)
         mask = torch.ones_like(seq_t)
-        model.forward(seq_t, mask)
+        fwd = model.forward(seq_t, mask)  # base-model decoder: per-nt reactivity
         pw = model.pairwise_features
         pw = pw + pw.permute(0, 2, 1, 3)  # symmetrize
         preds = model.ct_predictor(model.dropout(pw)).sigmoid().squeeze(-1)  # (1, L, L)
@@ -166,8 +184,18 @@ def _real_matrix(sequence: str, checkpoint: str, work: Path) -> list[list[float]
     n = len(sequence)
     if mat.shape != (n, n):
         raise RealInferenceError(f"matrix shape {mat.shape} != ({n},{n}).")
-    _log(f"done: {n}x{n} matrix")
-    return [[round(float(v), 4) for v in row] for row in mat]
+
+    # forward() returns (B, L) after its squeeze(-1), or (B, L, C) on a multi-channel
+    # decoder; a (preds, attention) tuple only when return_aw=True (we don't pass it,
+    # but stay tolerant). Flatten extra channels by taking the first.
+    react_t = (fwd[0] if isinstance(fwd, tuple) else fwd).squeeze(0).float().cpu()
+    if react_t.dim() > 1:
+        react_t = react_t[..., 0]
+    reactivity = [round(float(v), 4) for v in react_t]
+    if len(reactivity) != n:
+        raise RealInferenceError(f"reactivity length {len(reactivity)} != {n}.")
+    _log(f"done: {n}x{n} matrix + reactivity profile")
+    return [[round(float(v), 4) for v in row] for row in mat], reactivity
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -191,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     if ckpt_exists:
         # A configured real path that fails must error (not silently fall to stub).
         try:
-            matrix = _real_matrix(sequence, checkpoint, Path.cwd())
+            matrix, reactivity = _real_matrix(sequence, checkpoint, Path.cwd())
         except Exception as exc:  # noqa: BLE001 - surface the reason to the caller
             raise RealInferenceError(f"RibonanzaNet-SS inference failed: {exc}") from exc
         engine = "ribonanzanet"
@@ -212,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
         cache.mkdir(parents=True, exist_ok=True)
         (cache / "weights.marker").write_text("stub-cache")
         matrix = _stub_matrix(sequence)
+        reactivity = _stub_reactivity(sequence)
         engine = "stub"
 
     _log(f"done: engine={engine}")
@@ -229,6 +258,13 @@ def main(argv: list[str] | None = None) -> int:
         "length": len(sequence),
         "format": "base_pairing_matrix",
         "diag": diag,
+        # Auxiliary readout (report/raw only, NOT in out.json — see module docstring).
+        # The stub profile is a 0/1 sawtooth: unmistakably not a prediction.
+        "reactivity": reactivity,
+        "reactivity_note": (
+            "per-nucleotide reactivity from the base-model decoder of the SS-FINETUNED "
+            "checkpoint; scale unvalidated — check loop-high/stem-low before trusting"
+        ),
     }))
     return 0
 

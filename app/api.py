@@ -282,6 +282,9 @@ def serialize_run(run: Run, manifest: Manifest) -> dict:
     }
     if run.state == RunState.SUCCEEDED:
         outputs = read_outputs(run.outputs_ref)
+        # The real-vs-stub tell lives in the artifact: expose the runner's engine
+        # ("stub" = placeholder output) to API clients, same as the web run page.
+        body["engine"] = outputs.get("engine")
         kind = manifest.outputs.kind
         if kind == "contact_map":
             body["sequence"] = outputs.get("sequence")
