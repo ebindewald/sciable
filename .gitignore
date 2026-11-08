@@ -1,3 +1,4 @@
+research/
 .chats/
 application/
 chela/
@@ -33,3 +34,8 @@ dist/
 # tracked via .gitkeep so the structure exists on a fresh clone.
 deploy-docs/*
 !deploy-docs/.gitkeep
+
+# Research experiment minutiae: cached per-run matrices, derived summaries, logs.
+# Scripts + FINDINGS.md are tracked; raw results are regenerable via the scripts.
+research/**/results/
+research/**/*.log
