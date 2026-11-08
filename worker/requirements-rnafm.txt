@@ -1,0 +1,24 @@
+# RNA-FM (per-residue embeddings) Runpod Serverless worker dependencies.
+#
+# Upstream code (MIT): https://github.com/ml4bio/RNA-FM — the pip/importable package is
+# `rna-fm` (imported as `fm`). worker/Dockerfile.rnafm installs it pinned-by-commit
+# (pip install "git+https://github.com/ml4bio/RNA-FM@<commit>"), which also pulls the
+# package's own install_requires: numpy, pandas, tqdm, scikit-learn, ptflops.
+#
+# ⚠ VERIFIED module-level import surface (scanned 2026-11-08 at commit 348951516):
+#   `import fm` runs fm/__init__.py -> `from .downstream import *` -> baseline.py, which
+#   has an UNCONDITIONAL `from ptflops import get_model_complexity_info`. So ptflops is
+#   required just to import the package, even though we never use it. (apex is guarded by
+#   try/except; torchvision.datasets is only imported inside a function — neither needed.)
+#   These all arrive via the rna-fm install_requires, so nothing extra is listed here.
+#
+# ⚠ torch is NOT pinned/listed: the image builds on
+# pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime (modern-GPU kernels, sm_50..sm_120).
+# Upstream's environment.yml pins torch 1.9/py3.8, but the model is a plain BERT encoder
+# (nn.Module + F.*), so it should run on 2.7 — confirm on the first smoke run. rna-fm's
+# install_requires does NOT list torch, so pip will not replace the base image's build.
+
+runpod>=1.6
+
+# Used at build time to bake the checkpoint (hf_hub_download); harmless at runtime.
+huggingface_hub

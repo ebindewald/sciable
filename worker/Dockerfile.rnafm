@@ -1,0 +1,88 @@
+# RNA-FM (per-residue embeddings) Runpod Serverless worker image.
+#
+# worker/run_rnafm.py loads RNA-FM via fm.pretrained.rna_fm_t12(<baked checkpoint>) and
+# returns an L×640 per-residue embedding matrix (+ a mean-pooled 640-vector). Without the
+# checkpoint the runner fails loudly (stub only on SCIABLE_ALLOW_STUB=1, CI/dev).
+#
+# NOT the repo-root Dockerfile (that's structRFM's). Built by Runpod's console GitHub
+# import with Dockerfile Path = /worker/Dockerfile.rnafm into Runpod's private registry —
+# the only supported deploy path; see docs/ENDPOINT_SETUP.md ("What NOT to do").
+#
+# Provenance: ml4bio/RNA-FM (MIT code). The pip package is `rna-fm` (imported as `fm`);
+# this image installs it pinned by commit and bakes the ~1.19 GB RNA-FM_pretrained.pth
+# checkpoint from HF cuhkaih/rnafm. Personal/BYOK use, private registry — nothing public.
+# ⚠ Verify the WEIGHTS redistribution terms before publishing any image.
+#
+# Build (GPU hosts are linux/amd64):
+#   docker build --platform linux/amd64 -f worker/Dockerfile.rnafm \
+#     --build-arg RNAFM_COMMIT=<full-sha> \
+#     --build-arg RNAFM_CKPT_SHA256=<sha256> \
+#     -t <registry>/rnafm-worker:<tag> .
+
+# Upstream's environment.yml pins torch 1.9/py3.8, but RNA-FM is a plain BERT encoder
+# (nn.Module + F.*), so we use the same 2.7.1 / CUDA 12.8 base the other methods moved to
+# (covers sm_50..sm_120). ⚠ torch-2.7 compat confirmed only on a smoke run.
+FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
+
+# Pinned upstream commit (verified 2026-11-08 from GitHub main; build-unverified).
+ARG RNAFM_COMMIT=348951516e0963d22bbb33b3c9fc18c89081d38e
+# Checkpoint pinned (verified 2026-11-08): HF LFS oid (=sha256) of RNA-FM_pretrained.pth.
+# File = 1,194,424,423 bytes. CKPT_REV pins the HF repo revision.
+ARG RNAFM_CKPT_SHA256=5b5d7d87b37c291ef42c140ef9edf7aea29f255fa2a4fd435f776c52e93d5e99
+ARG RNAFM_CKPT_REPO=cuhkaih/rnafm
+ARG RNAFM_CKPT_REV=91d4a46d28d8054a7b429955e8fc0c253ba0afd6
+# ⚠ Keep "RNA-FM" in the baked filename: rna_fm_t12 derives model_name from the file stem,
+# and _has_regression_weights() keys off it to decide whether to co-load a regression .pt.
+ARG RNAFM_CKPT_FILE=RNA-FM_pretrained.pth
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    WORKER_WORK_ROOT=/var/lib/sciable/jobs \
+    RNAFM_CHECKPOINT=/opt/rnafm_ckpt/RNA-FM_pretrained.pth \
+    DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /opt/worker
+
+RUN apt-get update --allow-releaseinfo-change \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install RNA-FM pinned by commit — this also pulls its install_requires
+# (numpy, pandas, tqdm, scikit-learn, ptflops). torch is NOT in install_requires, so the
+# base image's CUDA build is preserved. Then the worker's own build/runtime deps.
+RUN pip install --no-cache-dir "git+https://github.com/ml4bio/RNA-FM@${RNAFM_COMMIT}"
+COPY worker/requirements-rnafm.txt ./worker/requirements-rnafm.txt
+RUN pip install --no-cache-dir -r worker/requirements-rnafm.txt
+
+# Bake the checkpoint (no runtime download — the runner loads a local path). Keep the
+# original filename so the loader's model_name/regression logic behaves.
+RUN python -c "from huggingface_hub import hf_hub_download; \
+      p = hf_hub_download(repo_id='${RNAFM_CKPT_REPO}', filename='${RNAFM_CKPT_FILE}', \
+          revision='${RNAFM_CKPT_REV}', local_dir='/opt/rnafm_ckpt'); \
+      print('downloaded', p)" \
+    && test -f "${RNAFM_CHECKPOINT}" \
+    && if [ "${RNAFM_CKPT_SHA256}" = "REPLACE_WITH_VERIFIED_SHA256" ]; then \
+         echo "WARNING: checkpoint sha256 not pinned — skipping verification (dev build)."; \
+         sha256sum "${RNAFM_CHECKPOINT}"; \
+       else \
+         echo "${RNAFM_CKPT_SHA256}  ${RNAFM_CHECKPOINT}" | sha256sum -c -; \
+       fi
+
+# Offline from here on (build-time download done above): defense-in-depth so runtime can
+# never reach the network; the runner always uses the baked local path.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
+COPY worker/ /opt/worker/worker/
+# Root handler.py is the method-agnostic Runpod entrypoint (dispatches via worker.handler);
+# same as the other images, no separate entrypoint needed.
+COPY handler.py /opt/worker/handler.py
+
+# Non-root; own the per-job root and the baked checkpoint dir.
+RUN useradd --create-home --uid 10001 worker \
+    && mkdir -p /var/lib/sciable/jobs \
+    && chown -R worker:worker /var/lib/sciable /opt/rnafm_ckpt
+USER worker
+
+# Runpod Serverless entrypoint: root handler.py with runpod.serverless.start().
+CMD ["python", "-u", "handler.py"]

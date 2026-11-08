@@ -102,11 +102,14 @@ def _real_embedding(sequence: str, checkpoint: str) -> list[list[float]]:
     import fm
 
     _log(f"loading RNA-FM from {checkpoint}")
-    # The baked checkpoint is loaded locally (no runtime download; HF_HUB_OFFLINE=1).
-    # NOTE (Phase B): confirm the exact loader against the pinned commit — the esm-derived
-    # API exposes load_model_and_alphabet_local(path); rna_fm_t12() auto-downloads and
-    # must NOT be used on the offline image.
-    model, alphabet = fm.pretrained.load_model_and_alphabet_local(checkpoint)
+    # Verified against the pinned commit (fm/pretrained.py): rna_fm_t12(path) takes the
+    # LOCAL branch (os.path.exists) and loads with theme="rna" — NOT the bare
+    # load_model_and_alphabet_local(), whose theme defaults to "protein" (wrong
+    # alphabet). No runtime download (HF_HUB_OFFLINE=1). ⚠ The baked file must keep
+    # "RNA-FM" in its stem (e.g. RNA-FM_pretrained.pth): the loader derives model_name
+    # from the filename, and _has_regression_weights() keys off it to decide whether to
+    # co-load a regression .pt — a renamed file would try (and fail) to find one.
+    model, alphabet = fm.pretrained.rna_fm_t12(checkpoint)
     batch_converter = alphabet.get_batch_converter()
     model = model.to(device).eval()
 
@@ -115,7 +118,7 @@ def _real_embedding(sequence: str, checkpoint: str) -> list[list[float]]:
     _log(f"model ready on {device}; running inference, length {len(sequence)}")
     with torch.no_grad():
         out = model(tokens, repr_layers=[12])
-    reps = out["representations"][12]  # (1, L+2, 640), incl. BOS/EOS
+    reps = out["representations"][12]  # (1, L+2, 640), incl. prepended BOS + appended EOS
     # Strip the leading BOS and trailing EOS token to get one vector per nucleotide.
     per_residue = reps[0, 1 : 1 + len(sequence)].detach().float().cpu()
     _log("inference done; serializing embeddings")

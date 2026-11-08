@@ -125,3 +125,24 @@ the checkpoint.
 **Selection heuristic.** Prove the lane with a small, self-contained model first (RibonanzaNet or
 RNA-FM), then attempt a flagship (Evo2-7B short-context, or Boltz-1) once the per-method cost is low
 and we know the GPU/cost envelope.
+
+---
+
+## Batch mode / persistent model (amortize the per-job reload)
+
+**Idea.** Today each job runs in a fresh subprocess that reloads the model (~1–3 s) — fine for
+interactive single requests (3 s ≈ 0.1 s to a human), but a fixed tax that dominates in **batch**:
+folding N sequences costs N×(load + infer) instead of one load + N×infer. On ~1,000 sequences
+that's ~50 min of pure reloading.
+
+**Options when batch matters (not before):**
+- A **batch input** (many sequences in one job) so one subprocess loads the model once and loops —
+  keeps per-job isolation (one job = one workspace) while amortizing the load. Simplest win; a new
+  input shape + output list.
+- A **persistent model process** (load once per warm worker, serve many requests) — the item
+  deferred in `AGENTS.md`. Fastest per request but gives up the clean per-job subprocess isolation,
+  so it's a real trade, not a free win.
+- Runpod-side: raise `idleTimeout` / enable **FlashBoot** to cut cold-start reloads between bursts.
+
+**Why not now.** Interactive latency is already fine; this only pays off under batch/throughput
+workloads (e.g. folding or probing many sequences at once). Revisit when that use case is real.
